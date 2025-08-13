@@ -9,10 +9,10 @@ import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
 import java.awt.Color
-import java.awt.Graphics2D
 import java.awt.image.BufferedImage
 import java.net.InetAddress
 import java.util.*
+import kotlin.random.Random
 
 /**
  * Service for generating QR codes for wireless ADB debugging
@@ -23,9 +23,11 @@ class QRCodeService(private val project: Project) {
 
     /**
      * Generate QR code data for wireless debugging
+     * Format follows Android's wireless debugging QR code standard
      */
     fun generateWirelessDebuggingQRData(ip: String, port: String, password: String): String {
-        // Format: WIFI:T:ADB;S:devicename;P:password;H:ip:port;;
+        // Android wireless debugging QR format:
+        // WIFI:T:ADB;S:devicename;P:password;H:ip:port;;
         val deviceName = getDeviceName()
         return "WIFI:T:ADB;S:$deviceName;P:$password;H:$ip:$port;;"
     }
@@ -37,31 +39,28 @@ class QRCodeService(private val project: Project) {
         return try {
             val hints = EnumMap<EncodeHintType, Any>(EncodeHintType::class.java)
             hints[EncodeHintType.ERROR_CORRECTION] = ErrorCorrectionLevel.M
-            hints[EncodeHintType.MARGIN] = 2
+            hints[EncodeHintType.MARGIN] = 1
+            hints[EncodeHintType.CHARACTER_SET] = "UTF-8"
 
             val writer = QRCodeWriter()
             val bitMatrix: BitMatrix = writer.encode(data, BarcodeFormat.QR_CODE, size, size, hints)
 
             val image = BufferedImage(size, size, BufferedImage.TYPE_INT_RGB)
-            val graphics = image.createGraphics()
 
-            // Set background to white
-            graphics.color = Color.WHITE
-            graphics.fillRect(0, 0, size, size)
-
-            // Draw QR code
-            graphics.color = Color.BLACK
+            // Draw the QR code
             for (x in 0 until size) {
                 for (y in 0 until size) {
-                    if (bitMatrix[x, y]) {
-                        graphics.fillRect(x, y, 1, 1)
-                    }
+                    val color = if (bitMatrix[x, y]) Color.BLACK.rgb else Color.WHITE.rgb
+                    image.setRGB(x, y, color)
                 }
             }
 
-            graphics.dispose()
             image
         } catch (e: WriterException) {
+            e.printStackTrace()
+            null
+        } catch (e: Exception) {
+            e.printStackTrace()
             null
         }
     }
@@ -71,7 +70,8 @@ class QRCodeService(private val project: Project) {
      */
     private fun getDeviceName(): String {
         return try {
-            InetAddress.getLocalHost().hostName
+            val hostname = InetAddress.getLocalHost().hostName
+            if (hostname.isNotBlank()) hostname else "AndroidStudio"
         } catch (e: Exception) {
             "AndroidStudio"
         }
@@ -79,11 +79,17 @@ class QRCodeService(private val project: Project) {
 
     /**
      * Generate QR code for wireless debugging with random password
+     * This creates a complete QR code that Android devices can scan
      */
     fun generateWirelessDebuggingQR(ip: String, port: String): Pair<String, BufferedImage?> {
         val password = generateRandomPassword()
         val qrData = generateWirelessDebuggingQRData(ip, port, password)
-        val qrImage = generateQRCodeImage(qrData)
+        val qrImage = generateQRCodeImage(qrData, 300)
+
+        // Debug output
+        println("Generated QR Data: $qrData")
+        println("Password: $password")
+
         return Pair(password, qrImage)
     }
 
@@ -91,7 +97,7 @@ class QRCodeService(private val project: Project) {
      * Generate a random 6-digit password for pairing
      */
     private fun generateRandomPassword(): String {
-        return (100000..999999).random().toString()
+        return Random.nextInt(100000, 999999).toString()
     }
 
     /**
@@ -99,11 +105,15 @@ class QRCodeService(private val project: Project) {
      */
     fun parseQRCodeContent(qrContent: String): QRCodeData? {
         return try {
-            if (!qrContent.startsWith("WIFI:T:ADB;")) {
+            // Clean up the input
+            val cleanContent = qrContent.trim()
+
+            if (!cleanContent.startsWith("WIFI:T:ADB;")) {
+                println("QR content doesn't start with WIFI:T:ADB;")
                 return null
             }
 
-            val parts = qrContent.split(";")
+            val parts = cleanContent.split(";")
             var deviceName = ""
             var password = ""
             var hostInfo = ""
@@ -116,11 +126,20 @@ class QRCodeService(private val project: Project) {
                 }
             }
 
+            if (hostInfo.isEmpty() || password.isEmpty()) {
+                println("Missing host info or password in QR code")
+                return null
+            }
+
             val hostParts = hostInfo.split(":")
-            if (hostParts.size != 2) return null
+            if (hostParts.size != 2) {
+                println("Invalid host format: $hostInfo")
+                return null
+            }
 
             QRCodeData(hostParts[0], hostParts[1], password, deviceName)
         } catch (e: Exception) {
+            e.printStackTrace()
             null
         }
     }

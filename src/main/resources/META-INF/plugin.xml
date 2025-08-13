@@ -15,6 +15,7 @@
         <li><strong>Visual Status Monitoring</strong> - Real-time ADB status and connection feedback</li>
         <li><strong>Modern UI</strong> - Clean, tabbed interface following IntelliJ design principles</li>
         <li><strong>Quick Actions</strong> - Tools menu integration and keyboard shortcuts</li>
+        <li><strong>Debug Mode</strong> - Comprehensive debugging tools for troubleshooting</li>
     </ul>
 
     <h4>🚀 Quick Start:</h4>
@@ -26,11 +27,11 @@
         <li>Connect and start debugging wirelessly!</li>
     </ol>
 
-    <h4>💡 Pro Tips:</h4>
+    <h4>🛠️ Troubleshooting:</h4>
     <ul>
-        <li>Use "Quick Connect" from Tools menu for instant access to recent devices</li>
-        <li>Save devices for easy reconnection after restarts</li>
-        <li>Check the Console tab for detailed connection logs</li>
+        <li>Use "Test ADB Connection" to verify ADB installation</li>
+        <li>Enable debug mode in Add Device dialog for detailed logs</li>
+        <li>Check that both devices are on the same WiFi network</li>
     </ul>
 
     <p><em>Perfect for developers who want to debug Android apps without the hassle of USB cables!</em></p>
@@ -69,6 +70,21 @@
 
             <separator/>
 
+            <!-- Debug and Test Actions -->
+            <action id="com.adbwireless.TestADB"
+                    class="com.adbwireless.actions.QuickADBTestAction"
+                    text="Test ADB Connection"
+                    description="Run comprehensive ADB test and show debug information"
+                    icon="AllIcons.General.InspectionsOK"/>
+
+            <action id="com.adbwireless.DirectADBTest"
+                    class="com.adbwireless.actions.DirectADBTestAction"
+                    text="Direct ADB Test"
+                    description="Test ADB commands directly without service layer"
+                    icon="AllIcons.General.InspectionsOK"/>
+
+            <separator/>
+
             <!-- Additional actions -->
             <action id="com.adbwireless.OpenToolWindow"
                     class="com.adbwireless.actions.OpenToolWindowAction"
@@ -94,19 +110,29 @@
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
             <separator/>
             <reference id="com.adbwireless.QuickConnect"/>
-            <reference id="com.adbwireless.GenerateQRCode"/>
+            <reference id="com.adbwireless.TestADB"/>
         </group>
 
         <!-- Toolbar actions -->
         <group id="ADBWirelessToolbar">
             <add-to-group group-id="MainToolBar" anchor="last"/>
             <reference id="com.adbwireless.QuickConnect"/>
-            <reference id="com.adbwireless.GenerateQRCode"/>
+            <reference id="com.adbwireless.TestADB"/>
         </group>
     </actions>
 
     <!-- Change Notes -->
     <change-notes><![CDATA[
+    <h3>Version 1.0.1 - Debug Edition</h3>
+    <ul>
+        <li>🐛 Enhanced debugging capabilities for connection issues</li>
+        <li>🔧 Added comprehensive ADB test action</li>
+        <li>📊 Detailed debug output in Add Device dialog</li>
+        <li>🚀 Improved error handling and troubleshooting guides</li>
+        <li>💡 Better validation and user feedback</li>
+        <li>🔍 Step-by-step pairing process with real-time feedback</li>
+    </ul>
+
     <h3>Version 1.0.0</h3>
     <ul>
         <li>🎉 Initial release of ADB Wireless Manager</li>

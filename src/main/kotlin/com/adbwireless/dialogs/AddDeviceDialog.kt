@@ -3,9 +3,6 @@ package com.adbwireless.dialogs
 import com.adbwireless.models.Device
 import com.adbwireless.services.ADBService
 import com.adbwireless.services.SettingsService
-import com.adbwireless.services.QRCodeService
-import com.adbwireless.dialogs.GenerateQRCodeDialog
-import com.intellij.icons.AllIcons
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
@@ -15,10 +12,11 @@ import com.intellij.ui.dsl.builder.*
 import com.intellij.util.ui.JBUI
 import kotlinx.coroutines.*
 import java.awt.*
+import java.awt.event.ActionEvent
 import javax.swing.*
 
 /**
- * Dialog for adding new devices with QR code or manual pairing
+ * Enhanced dialog with comprehensive debugging for device pairing
  */
 class AddDeviceDialog(
     private val project: Project,
@@ -27,11 +25,10 @@ class AddDeviceDialog(
 
     private val adbService = project.service<ADBService>()
     private val settingsService = SettingsService.getInstance()
-    private val qrCodeService = project.service<QRCodeService>()
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     // UI Components
-    private val deviceNameField = JBTextField().apply {
+    private val deviceNameField = JBTextField("Test Device").apply {
         emptyText.text = "Enter device name (e.g., Galaxy S23)"
     }
 
@@ -40,32 +37,34 @@ class AddDeviceDialog(
     }
 
     // Manual pairing components
-    private val manualPairingPanel = JPanel()
     private val pairingPortField = JBTextField().apply {
-        emptyText.text = "Pairing port"
-        columns = 8
+        emptyText.text = "Pairing port (e.g., 37561)"
+        columns = 10
     }
+
     private val pairingCodeField = JBTextField().apply {
         emptyText.text = "6-digit code"
         columns = 8
     }
 
-    // QR code components
-    private val qrCodePanel = JPanel()
-    private val qrCodeField = JBTextArea(3, 30).apply {
-        emptyText.text = "Paste QR code content here..."
-        lineWrap = true
-        wrapStyleWord = true
+    // Debug output area
+    private val debugOutput = JBTextArea().apply {
+        isEditable = false
+        rows = 15
+        columns = 60
+        font = Font("Monospaced", Font.PLAIN, 11)
+        background = Color(0xF5F5F5)
+        text = "Debug output will appear here...\n"
     }
 
-    private val pairingMethodTabs = JBTabbedPane()
-    private val statusLabel = JLabel(" ")
+    private val statusLabel = JLabel("Ready for pairing")
     private var isOperationInProgress = false
 
     init {
-        title = "Add New Wireless Device"
+        title = "Add New Wireless Device - DEBUG MODE"
         init()
         setupUI()
+        runInitialChecks()
     }
 
     override fun createCenterPanel(): JComponent {
@@ -79,116 +78,106 @@ class AddDeviceDialog(
                 row("IP Address:") {
                     cell(deviceIpField)
                         .align(AlignX.FILL)
-                        .comment("From Android Settings → Developer Options → Wireless debugging")
+                        .comment("Get this from Android Settings → Developer Options → Wireless debugging")
+                }
+            }
+
+            group("Manual Pairing") {
+                row("Pairing Port:") {
+                    cell(pairingPortField)
+                        .comment("From 'Pair device with pairing code' - NOT the main port")
+                }
+                row("Pairing Code:") {
+                    cell(pairingCodeField)
+                        .comment("6-digit code shown on your device")
                 }
                 row {
-                    button("Generate QR Code for This Device") {
-                        generateQRCodeForDevice()
+                    button("🔗 Pair Device") {
+                        pairDeviceManually()
                     }.apply {
-                        component.icon = AllIcons.Actions.Preview
+                        component.preferredSize = Dimension(150, 30)
+                    }
+                    button("🧪 Test ADB") {
+                        testAdbConnection()
+                    }
+                    button("🔄 Restart ADB") {
+                        restartAdbServer()
                     }
                 }
             }
 
-            group("Pairing Method") {
+            group("Debug Output") {
                 row {
-                    cell(pairingMethodTabs)
+                    scrollCell(debugOutput)
                         .align(Align.FILL)
+                        .resizableColumn()
+                }
+                row {
+                    button("Clear Debug") {
+                        clearDebug()
+                    }
+                    button("Copy Debug") {
+                        copyDebugToClipboard()
+                    }
                 }
             }
 
             group("Status") {
                 row {
-                    cell(statusLabel)
-                        .apply {
-                            component.font = component.font.deriveFont(Font.ITALIC, 12f)
-                        }
+                    cell(statusLabel).apply {
+                        component.font = component.font.deriveFont(Font.BOLD, 12f)
+                    }
                 }
             }
         }.apply {
-            preferredSize = Dimension(500, 400)
+            preferredSize = Dimension(700, 600)
             border = JBUI.Borders.empty(16)
         }
     }
 
     private fun setupUI() {
-        // Setup manual pairing panel
-        manualPairingPanel.layout = BorderLayout()
-        val manualPanel = panel {
-            group("Manual Pairing") {
-                row("Pairing Port:") {
-                    cell(pairingPortField)
-                        .comment("Temporary port from 'Pair device with pairing code'")
-                }
-                row("Pairing Code:") {
-                    cell(pairingCodeField)
-                        .comment("6-digit code displayed on your Android device")
-                }
-                row {
-                    button("Pair Device") {
-                        pairDeviceManually()
-                    }.apply {
-                        component.icon = AllIcons.General.Web
+        // Auto-fill IP if possible
+        scope.launch {
+            try {
+                val localHost = java.net.InetAddress.getLocalHost()
+                val hostAddress = localHost.hostAddress
+                if (hostAddress.startsWith("192.168.") || hostAddress.startsWith("10.") || hostAddress.startsWith("172.")) {
+                    val networkPrefix = hostAddress.substringBeforeLast(".")
+                    SwingUtilities.invokeLater {
+                        deviceIpField.emptyText.text = "$networkPrefix.xxx"
+                        addDebug("💡 Your computer's IP: $hostAddress")
+                        addDebug("💡 Your device should have IP like: $networkPrefix.xxx")
                     }
                 }
-            }
-
-            group("Instructions") {
-                row {
-                    text("""
-                        1. Go to Settings → Developer Options → Wireless debugging
-                        2. Tap "Pair device with pairing code"
-                        3. Enter the port and code shown on your device
-                        4. Click "Pair Device"
-                    """.trimIndent())
-                }
+            } catch (e: Exception) {
+                addDebug("⚠️ Could not detect network: ${e.message}")
             }
         }
-        manualPairingPanel.add(manualPanel, BorderLayout.CENTER)
-
-        // Setup QR code panel
-        qrCodePanel.layout = BorderLayout()
-        val qrPanel = panel {
-            group("QR Code Pairing") {
-                row("QR Code Content:") {
-                    scrollCell(qrCodeField)
-                        .align(Align.FILL)
-                        .comment("Scan or copy the QR code content from your device")
-                }
-                row {
-                    button("Pair with QR Code") {
-                        pairDeviceWithQR()
-                    }.apply {
-                        component.icon = AllIcons.General.Web
-                    }
-                    button("Scan QR Code") {
-                        scanQRCode()
-                    }.apply {
-                        component.icon = AllIcons.Actions.Preview
-                    }
-                }
-            }
-
-            group("Instructions") {
-                row {
-                    text("""
-                        1. Go to Settings → Developer Options → Wireless debugging
-                        2. Tap "Pair device with QR code"
-                        3. Either scan the QR code or copy its content
-                        4. Paste the content above and click "Pair with QR Code"
-                    """.trimIndent())
-                }
-            }
-        }
-        qrCodePanel.add(qrPanel, BorderLayout.CENTER)
-
-        // Add tabs
-        pairingMethodTabs.addTab("Manual Pairing", AllIcons.General.Settings, manualPairingPanel)
-        pairingMethodTabs.addTab("QR Code", AllIcons.Actions.Preview, qrCodePanel)
     }
 
-    override fun createActions(): Array<Action> {
-        return arrayOf(cancelAction)
+    private fun runInitialChecks() {
+        addDebug("🚀 Starting ADB Wireless Manager Debug Mode")
+
+
+        scope.launch {
+            addDebug("1️⃣ Testing ADB installation...")
+            val testResult = adbService.testAdbConnectivity()
+
+            SwingUtilities.invokeLater {
+                if (testResult.success) {
+                    addDebug("✅ ADB test completed successfully!")
+                    addDebug(testResult.output)
+                    updateStatus("ADB Ready - Ready for pairing", false)
+                } else {
+                    addDebug("❌ ADB test failed!")
+                    addDebug("Error: ${testResult.error}")
+                    addDebug("Output: ${testResult.output}")
+                    updateStatus("ADB Error - Check debug output", true)
+
+                    showAdbInstallationHelp()
+                }
+            }
+        }
     }
 
     private fun pairDeviceManually() {
@@ -197,199 +186,398 @@ class AddDeviceDialog(
         val pairingPort = pairingPortField.text.trim()
         val pairingCode = pairingCodeField.text.trim()
 
-        if (!validateManualInput(deviceName, deviceIp, pairingPort, pairingCode)) return
+        addDebug("🔗 STARTING MANUAL PAIRING PROCESS")
 
-        setOperationInProgress(true, "Pairing with device manually...")
 
-        scope.launch {
-            try {
-                val result = adbService.pairDevice(deviceIp, pairingPort, pairingCode)
-                SwingUtilities.invokeLater {
-                    if (result.success) {
-                        updateStatus("✅ Pairing successful! You can now connect to this device.", false)
+        // Validate inputs
+        addDebug("📋 Validating inputs...")
+        addDebug("  Device Name: '$deviceName'")
+        addDebug("  Device IP: '$deviceIp'")
+        addDebug("  Pairing Port: '$pairingPort'")
+        addDebug("  Pairing Code: '$pairingCode'")
 
-                        // Save device and close dialog
-                        val device = Device(deviceName, deviceIp, "5555") // Default connection port
-                        settingsService.saveDevice(device)
-                        onDeviceAdded(device)
-                        close(OK_EXIT_CODE)
-
-                    } else {
-                        updateStatus("❌ Pairing failed: ${result.error.ifEmpty { result.output }}", true)
-                        showManualPairingTroubleshooting()
-                    }
-                }
-            } catch (e: Exception) {
-                SwingUtilities.invokeLater {
-                    updateStatus("❌ Error during pairing: ${e.message}", true)
-                }
-            } finally {
-                SwingUtilities.invokeLater {
-                    setOperationInProgress(false)
-                }
-            }
-        }
-    }
-
-    private fun pairDeviceWithQR() {
-        val deviceName = deviceNameField.text.trim()
-        val deviceIp = deviceIpField.text.trim()
-        val qrContent = qrCodeField.text.trim()
-
-        if (!validateQRInput(deviceName, deviceIp, qrContent)) return
-
-        setOperationInProgress(true, "Pairing with QR code...")
-
-        scope.launch {
-            try {
-                // Parse QR code content
-                val qrData = parseQRCodeContent(qrContent)
-                if (qrData == null) {
-                    SwingUtilities.invokeLater {
-                        updateStatus("❌ Invalid QR code format. Please check the content.", true)
-                    }
-                    return@launch
-                }
-
-                val result = adbService.pairDevice(qrData.ip, qrData.port, qrData.password)
-                SwingUtilities.invokeLater {
-                    if (result.success) {
-                        updateStatus("✅ QR pairing successful! You can now connect to this device.", false)
-
-                        // Save device and close dialog
-                        val device = Device(deviceName, deviceIp, "5555") // Default connection port
-                        settingsService.saveDevice(device)
-                        onDeviceAdded(device)
-                        close(OK_EXIT_CODE)
-
-                    } else {
-                        updateStatus("❌ QR pairing failed: ${result.error.ifEmpty { result.output }}", true)
-                        showQRPairingTroubleshooting()
-                    }
-                }
-            } catch (e: Exception) {
-                SwingUtilities.invokeLater {
-                    updateStatus("❌ Error during QR pairing: ${e.message}", true)
-                }
-            } finally {
-                SwingUtilities.invokeLater {
-                    setOperationInProgress(false)
-                }
-            }
-        }
-    }
-
-    private fun scanQRCode() {
-        // Placeholder for QR code scanning functionality
-        // In a real implementation, you might use a webcam or screen capture
-        Messages.showInfoMessage(
-            project,
-            """
-            QR Code Scanning Options:
-            
-            1. Use your phone's camera to scan the QR code
-            2. Take a screenshot and use an online QR decoder
-            3. Copy the QR code content manually from the debug settings
-            
-            The QR code contains connection information in this format:
-            WIFI:T:ADB;S:devicename;P:password;H:ip:port;;
-            """.trimIndent(),
-            "QR Code Scanning Help"
-        )
-    }
-
-    private fun generateQRCodeForDevice() {
-        val deviceIp = deviceIpField.text.trim()
-        if (deviceIp.isEmpty()) {
-            updateStatus("❌ Please enter the device IP address first", true)
+        val validationError = validateInputs(deviceName, deviceIp, pairingPort, pairingCode)
+        if (validationError != null) {
+            addDebug("❌ Validation failed: $validationError")
+            updateStatus(validationError, true)
             return
         }
 
-        val dialog = GenerateQRCodeDialog(project, deviceIp, "5555")
-        dialog.show()
-    }
+        addDebug("✅ All inputs valid, proceeding with pairing...")
 
-    private fun validateManualInput(name: String, ip: String, port: String, code: String): Boolean {
-        when {
-            name.isEmpty() -> {
-                updateStatus("❌ Please enter a device name", true)
-                return false
-            }
-            ip.isEmpty() -> {
-                updateStatus("❌ Please enter the device IP address", true)
-                return false
-            }
-            port.isEmpty() -> {
-                updateStatus("❌ Please enter the pairing port", true)
-                return false
-            }
-            code.isEmpty() -> {
-                updateStatus("❌ Please enter the pairing code", true)
-                return false
-            }
-            code.length != 6 || !code.all { it.isDigit() } -> {
-                updateStatus("❌ Pairing code must be exactly 6 digits", true)
-                return false
+        setOperationInProgress(true, "Pairing with device...")
+
+        scope.launch {
+            try {
+                addDebug("\n🚀 Executing ADB pair command...")
+                addDebug("Command: adb pair $deviceIp:$pairingPort $pairingCode")
+                addDebug("⏳ Waiting for ADB response (timeout: 30s)...")
+
+                // Add periodic status updates
+                val statusJob = launch {
+                    var dots = 0
+                    while (isActive) {
+                        delay(1000)
+                        dots = (dots + 1) % 4
+                        val dotsStr = ".".repeat(dots)
+                        SwingUtilities.invokeLater {
+                            updateStatus("🔄 Pairing in progress$dotsStr", false)
+                        }
+                    }
+                }
+
+                val result = adbService.pairDevice(deviceIp, pairingPort, pairingCode)
+                statusJob.cancel()
+
+                SwingUtilities.invokeLater {
+                    addDebug("\n📊 PAIRING RESULT:")
+                    addDebug("  Success: ${result.success}")
+                    addDebug("  Exit Code: ${result.exitCode}")
+                    addDebug("  Timed Out: ${result.timedOut}")
+                    addDebug("  Command: ${result.command}")
+                    addDebug("  Output: '${result.output}'")
+                    addDebug("  Error: '${result.error}'")
+
+                    if (result.timedOut) {
+                        addDebug("\n⏰ PAIRING TIMED OUT!")
+                        addDebug("This usually means:")
+                        addDebug("• Wrong IP address or port")
+                        addDebug("• Device not on same network")
+                        addDebug("• Firewall blocking connection")
+                        addDebug("• Pairing code expired")
+                        updateStatus("❌ Pairing timed out - check network and try again", true)
+                        showTimeoutTroubleshooting()
+
+                    } else if (result.success) {
+                        addDebug("\n🎉 PAIRING SUCCESSFUL!")
+                        addDebug("Device should now be paired and ready for connection")
+
+                        // Save device
+                        val device = Device(deviceName, deviceIp, "5555")
+                        settingsService.saveDevice(device)
+
+                        updateStatus("✅ Pairing successful! Device saved.", false)
+
+                        // Ask if user wants to test connection
+                        val testConnection = Messages.showYesNoDialog(
+                            project,
+                            "Pairing successful! Would you like to test the connection now?",
+                            "Test Connection?",
+                            Messages.getQuestionIcon()
+                        )
+
+                        if (testConnection == Messages.YES) {
+                            testConnection(device)
+                        } else {
+                            onDeviceAdded(device)
+                            close(OK_EXIT_CODE)
+                        }
+
+                    } else {
+                        addDebug("\n❌ PAIRING FAILED!")
+                        handlePairingFailure(result)
+                    }
+                }
+            } catch (e: Exception) {
+                SwingUtilities.invokeLater {
+                    addDebug("\n💥 EXCEPTION DURING PAIRING:")
+                    addDebug("  Exception: ${e.javaClass.simpleName}")
+                    addDebug("  Message: ${e.message}")
+                    addDebug("  Stack trace:")
+                    e.printStackTrace()
+
+                    updateStatus("❌ Exception during pairing: ${e.message}", true)
+                }
+            } finally {
+                SwingUtilities.invokeLater {
+                    setOperationInProgress(false)
+                }
             }
         }
-        return true
     }
 
-    private fun validateQRInput(name: String, ip: String, qrContent: String): Boolean {
-        when {
-            name.isEmpty() -> {
-                updateStatus("❌ Please enter a device name", true)
-                return false
-            }
-            ip.isEmpty() -> {
-                updateStatus("❌ Please enter the device IP address", true)
-                return false
-            }
-            qrContent.isEmpty() -> {
-                updateStatus("❌ Please paste the QR code content", true)
-                return false
+    private fun testConnection(device: Device) {
+        addDebug("\n🔌 TESTING CONNECTION...")
+        addDebug("Attempting to connect to ${device.getConnectAddress()}")
+
+        scope.launch {
+            try {
+                val result = adbService.connectDevice(device)
+
+                SwingUtilities.invokeLater {
+                    addDebug("\n📊 CONNECTION TEST RESULT:")
+                    addDebug("  Success: ${result.success}")
+                    addDebug("  Exit Code: ${result.exitCode}")
+                    addDebug("  Output: '${result.output}'")
+                    addDebug("  Error: '${result.error}'")
+
+                    if (result.success) {
+                        addDebug("🎉 CONNECTION SUCCESSFUL!")
+                        addDebug("Device is ready for wireless debugging!")
+                        updateStatus("✅ Connection test successful!", false)
+
+                        Messages.showInfoMessage(
+                            project,
+                            "Success! Device '${device.name}' is now connected and ready for wireless debugging.",
+                            "Connection Successful"
+                        )
+
+                        onDeviceAdded(device)
+                        close(OK_EXIT_CODE)
+                    } else {
+                        addDebug("❌ CONNECTION FAILED!")
+                        addDebug("The device was paired but connection failed.")
+                        addDebug("This might be normal - the connection port may be different.")
+
+                        updateStatus("⚠️ Pairing OK, but connection failed. Check device settings.", true)
+
+                        // Still add the device as it was successfully paired
+                        onDeviceAdded(device)
+                    }
+                }
+            } catch (e: Exception) {
+                SwingUtilities.invokeLater {
+                    addDebug("💥 CONNECTION TEST EXCEPTION: ${e.message}")
+                    updateStatus("Connection test failed", true)
+                }
             }
         }
-        return true
     }
 
-    private fun parseQRCodeContent(qrContent: String): QRData? {
-        val qrData = qrCodeService.parseQRCodeContent(qrContent)
-        return qrData?.let { QRData(it.ip, it.port, it.password) }
+    private fun validateInputs(name: String, ip: String, port: String, code: String): String? {
+        return when {
+            name.isEmpty() -> "❌ Please enter a device name"
+            ip.isEmpty() -> "❌ Please enter the device IP address"
+            !ip.matches(Regex("\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}")) ->
+                "❌ Invalid IP format. Use format like 192.168.1.100"
+            port.isEmpty() -> "❌ Please enter the pairing port"
+            !port.all { it.isDigit() } -> "❌ Pairing port must be numeric"
+            port.toIntOrNull() !in 1..65535 -> "❌ Invalid port number (1-65535)"
+            code.isEmpty() -> "❌ Please enter the pairing code"
+            code.length != 6 -> "❌ Pairing code must be exactly 6 digits"
+            !code.all { it.isDigit() } -> "❌ Pairing code must contain only digits"
+            else -> null
+        }
     }
 
-    private fun showManualPairingTroubleshooting() {
+    private fun handlePairingFailure(result: ADBService.CommandResult) {
+        addDebug("🔍 ANALYZING FAILURE...")
+
+        val output = result.output.lowercase()
+        val error = result.error.lowercase()
+        val combined = "$output $error"
+
+        when {
+            "failed to authenticate" in combined || "authentication failed" in combined -> {
+                addDebug("📱 DIAGNOSIS: Authentication failed")
+                addDebug("💡 SOLUTION: Check the pairing code and try again")
+                updateStatus("❌ Wrong pairing code. Please check and retry.", true)
+            }
+            "connection refused" in combined || "refused" in combined -> {
+                addDebug("📱 DIAGNOSIS: Connection refused")
+                addDebug("💡 SOLUTION: Check IP address and port")
+                updateStatus("❌ Connection refused. Check IP and port.", true)
+            }
+            "timeout" in combined || "timed out" in combined -> {
+                addDebug("📱 DIAGNOSIS: Connection timeout")
+                addDebug("💡 SOLUTION: Check network connection")
+                updateStatus("❌ Connection timeout. Check network.", true)
+            }
+            "no route to host" in combined || "unreachable" in combined -> {
+                addDebug("📱 DIAGNOSIS: Network unreachable")
+                addDebug("💡 SOLUTION: Ensure both devices are on same WiFi network")
+                updateStatus("❌ Network unreachable. Check WiFi connection.", true)
+            }
+            "invalid" in combined && "port" in combined -> {
+                addDebug("📱 DIAGNOSIS: Invalid port")
+                addDebug("💡 SOLUTION: Check the pairing port from device settings")
+                updateStatus("❌ Invalid port. Check device pairing settings.", true)
+            }
+            else -> {
+                addDebug("📱 DIAGNOSIS: Unknown error")
+                addDebug("💡 SOLUTION: Try restarting wireless debugging on device")
+                updateStatus("❌ Pairing failed. See debug output for details.", true)
+            }
+        }
+
+        // Show troubleshooting dialog
+        showPairingTroubleshooting()
+    }
+
+    private fun testAdbConnection() {
+        addDebug("\n🧪 TESTING ADB CONNECTION...")
+        setOperationInProgress(true, "Testing ADB...")
+
+        scope.launch {
+            try {
+                val result = adbService.testAdbConnectivity()
+
+                SwingUtilities.invokeLater {
+                    addDebug("\n📊 ADB TEST RESULT:")
+                    addDebug("Success: ${result.success}")
+                    addDebug("Output:\n${result.output}")
+                    if (result.error.isNotEmpty()) {
+                        addDebug("Error:\n${result.error}")
+                    }
+
+                    if (result.success) {
+                        updateStatus("✅ ADB test successful", false)
+                    } else {
+                        updateStatus("❌ ADB test failed", true)
+                        showAdbInstallationHelp()
+                    }
+                }
+            } catch (e: Exception) {
+                SwingUtilities.invokeLater {
+                    addDebug("💥 ADB TEST EXCEPTION: ${e.message}")
+                    updateStatus("❌ ADB test error", true)
+                }
+            } finally {
+                SwingUtilities.invokeLater {
+                    setOperationInProgress(false)
+                }
+            }
+        }
+    }
+
+    private fun restartAdbServer() {
+        addDebug("\n🔄 RESTARTING ADB SERVER...")
+        setOperationInProgress(true, "Restarting ADB server...")
+
+        scope.launch {
+            try {
+                val result = adbService.restartAdbServer()
+
+                SwingUtilities.invokeLater {
+                    addDebug("\n📊 ADB RESTART RESULT:")
+                    addDebug("Success: ${result.success}")
+                    addDebug("Output: ${result.output}")
+                    if (result.error.isNotEmpty()) {
+                        addDebug("Error: ${result.error}")
+                    }
+
+                    if (result.success) {
+                        addDebug("✅ ADB server restarted successfully")
+                        updateStatus("✅ ADB server restarted", false)
+                    } else {
+                        addDebug("❌ Failed to restart ADB server")
+                        updateStatus("❌ ADB restart failed", true)
+                    }
+                }
+            } catch (e: Exception) {
+                SwingUtilities.invokeLater {
+                    addDebug("💥 ADB RESTART EXCEPTION: ${e.message}")
+                    updateStatus("❌ ADB restart error", true)
+                }
+            } finally {
+                SwingUtilities.invokeLater {
+                    setOperationInProgress(false)
+                }
+            }
+        }
+    }
+
+    private fun showAdbInstallationHelp() {
         SwingUtilities.invokeLater {
             Messages.showInfoMessage(
                 project,
                 """
-                Manual Pairing Troubleshooting:
+                ADB Not Found or Not Working!
                 
-                • Ensure both devices are on the same WiFi network
-                • Verify the pairing code is correct and not expired
-                • Check that you're using the pairing port (not connection port)
-                • Try generating a new pairing code on your device
-                • Make sure Wireless debugging is enabled
+                📥 INSTALLATION STEPS:
+                
+                1. Download Android SDK Platform Tools:
+                   https://developer.android.com/studio/releases/platform-tools
+                
+                2. Extract to D:\Sdk\platform-tools\ (or any folder)
+                
+                3. Ensure adb.exe is at D:\Sdk\platform-tools\adb.exe
+                
+                4. Test by opening Command Prompt and running:
+                   D:\Sdk\platform-tools\adb.exe version
+                
+                🔧 ENVIRONMENT SETUP (Optional):
+                - Add D:\Sdk\platform-tools to your Windows PATH
+                - Set ANDROID_HOME environment variable to D:\Sdk
+                
+                After installation, click "Test ADB" button to verify.
                 """.trimIndent(),
-                "Pairing Help"
+                "ADB Installation Required"
             )
         }
     }
 
-    private fun showQRPairingTroubleshooting() {
+    private fun showTimeoutTroubleshooting() {
         SwingUtilities.invokeLater {
             Messages.showInfoMessage(
                 project,
                 """
-                QR Code Pairing Troubleshooting:
+                Pairing Timeout Troubleshooting:
                 
-                • Ensure the QR code content is complete and unmodified
-                • Verify both devices are on the same WiFi network
-                • Check that Wireless debugging is enabled on your device
-                • Make sure you copied the entire QR code text
-                • Try using manual pairing instead
+                🔍 COMMON CAUSES:
+                • Wrong IP address - check device wireless debugging screen
+                • Wrong port - use PAIRING port, not connection port  
+                • Different WiFi networks - both devices must be on same network
+                • Pairing code expired - generate new code on device
+                • Windows Firewall blocking ADB
+                
+                🛠️ QUICK FIXES:
+                1. On Android device:
+                   - Turn OFF wireless debugging
+                   - Turn ON wireless debugging again
+                   - Tap "Pair device with pairing code" again
+                   - Use the NEW port and code
+                
+                2. Check network connection:
+                   - Open Command Prompt
+                   - Run: ping ${deviceIpField.text.trim()}
+                   - Should get replies if network is OK
+                
+                3. Test ADB manually:
+                   - Open Command Prompt  
+                   - Run: D:\\Sdk\\platform-tools\\adb.exe pair ${deviceIpField.text.trim()}:${pairingPortField.text.trim()} ${pairingCodeField.text.trim()}
+                
+                4. Try mobile hotspot:
+                   - Connect computer to phone's hotspot
+                   - Try pairing again
+                
+                💡 TIP: Pairing codes expire in 30-60 seconds, so work quickly!
                 """.trimIndent(),
-                "QR Pairing Help"
+                "Timeout Troubleshooting"
+            )
+        }
+    }
+
+    private fun showPairingTroubleshooting() {
+        SwingUtilities.invokeLater {
+            Messages.showInfoMessage(
+                project,
+                """
+                Pairing Troubleshooting Guide:
+                
+                📱 ON YOUR ANDROID DEVICE:
+                1. Go to Settings → Developer Options → Wireless debugging
+                2. Turn OFF Wireless debugging, then turn it back ON
+                3. Tap "Pair device with pairing code" (NOT "Pair device with QR code")
+                4. Note the IP:PORT and 6-digit code shown
+                
+                💻 IN THIS DIALOG:
+                1. Enter the PAIRING port (the one shown in step 3, like 37561)
+                2. Enter the 6-digit code exactly as shown
+                3. Click "Pair Device" within 30 seconds
+                
+                🔍 COMMON ISSUES:
+                • Wrong port: Use PAIRING port, not connection port
+                • Expired code: Generate new code if it takes too long
+                • Network: Both devices must be on same WiFi
+                • Firewall: Windows may block ADB (port 5555)
+                
+                📝 WHAT TO CHECK:
+                • Device IP matches your computer's network range
+                • No typos in pairing code
+                • Wireless debugging is still enabled on device
+                """.trimIndent(),
+                "Pairing Help"
             )
         }
     }
@@ -397,8 +585,6 @@ class AddDeviceDialog(
     private fun setOperationInProgress(inProgress: Boolean, message: String = "") {
         isOperationInProgress = inProgress
         SwingUtilities.invokeLater {
-            isOKActionEnabled = !inProgress
-
             if (inProgress) {
                 updateStatus("🔄 $message", false)
             }
@@ -409,21 +595,41 @@ class AddDeviceDialog(
         SwingUtilities.invokeLater {
             statusLabel.text = message
             statusLabel.foreground = if (isError) {
-                com.intellij.ui.JBColor.RED
+                Color.RED
             } else {
-                com.intellij.ui.JBColor.GRAY
+                Color(0x2E7D32)
             }
+            addDebug("📊 Status: $message")
         }
     }
 
-    /**
-     * Data class for parsed QR code information
-     */
-    private data class QRData(
-        val ip: String,
-        val port: String,
-        val password: String
-    )
+    private fun addDebug(message: String) {
+        SwingUtilities.invokeLater {
+            val timestamp = java.time.LocalTime.now().toString().substring(0, 8)
+            debugOutput.append("[$timestamp] $message\n")
+            debugOutput.caretPosition = debugOutput.document.length
+        }
+    }
+
+    private fun clearDebug() {
+        debugOutput.text = ""
+        addDebug("🧹 Debug output cleared")
+    }
+
+    private fun copyDebugToClipboard() {
+        val clipboard = Toolkit.getDefaultToolkit().systemClipboard
+        val selection = java.awt.datatransfer.StringSelection(debugOutput.text)
+        clipboard.setContents(selection, selection)
+        addDebug("📋 Debug output copied to clipboard")
+    }
+
+    override fun createActions(): Array<Action> {
+        return arrayOf(object : AbstractAction("Close") {
+            override fun actionPerformed(e: ActionEvent?) {
+                close(CANCEL_EXIT_CODE)
+            }
+        })
+    }
 
     override fun dispose() {
         scope.cancel()
