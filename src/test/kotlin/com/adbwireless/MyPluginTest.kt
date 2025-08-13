@@ -1,4 +1,4 @@
-package com.github.rahmanrezaee.adbwirelessplugin
+package com.adbwireless
 
 import com.intellij.ide.highlighter.XmlFileType
 import com.intellij.openapi.components.service
@@ -6,7 +6,6 @@ import com.intellij.psi.xml.XmlFile
 import com.intellij.testFramework.TestDataPath
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.intellij.util.PsiErrorElementUtil
-import com.github.rahmanrezaee.adbwirelessplugin.services.MyProjectService
 
 @TestDataPath("\$CONTENT_ROOT/src/test/testData")
 class MyPluginTest : BasePlatformTestCase() {
@@ -30,9 +29,9 @@ class MyPluginTest : BasePlatformTestCase() {
     }
 
     fun testProjectService() {
-        val projectService = project.service<MyProjectService>()
-
-        assertNotSame(projectService.getRandomNumber(), projectService.getRandomNumber())
+        // Test that we can access project services
+        val adbService = project.service<com.adbwireless.services.ADBService>()
+        assertNotNull(adbService)
     }
 
     override fun getTestDataPath() = "src/test/testData/rename"

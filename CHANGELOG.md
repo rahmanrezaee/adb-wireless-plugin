@@ -1,7 +1,14 @@
-<!-- Keep a Changelog guide -> https://keepachangelog.com -->
-
-# adb-wireless-plugin Changelog
+# ADB Wireless Manager Changelog
 
 ## [Unreleased]
+
+## [1.0.0]
 ### Added
-- Initial scaffold created from [IntelliJ Platform Plugin Template](https://github.com/JetBrains/intellij-platform-plugin-template)
+- Initial release of ADB Wireless Manager
+- Wireless device pairing with Android 11+ devices
+- Device management and saving for quick reconnection
+- Real-time ADB command output logging
+- Tool window integration with Android Studio
+- Menu actions for quick access
+- Support for multiple saved devices
+- One-click connection to previously paired devices

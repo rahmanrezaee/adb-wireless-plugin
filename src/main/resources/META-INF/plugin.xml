@@ -1,15 +1,124 @@
-<!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
 <idea-plugin>
-    <id>com.github.rahmanrezaee.adbwirelessplugin</id>
-    <name>adb-wireless-plugin</name>
-    <vendor>rahmanrezaee</vendor>
+    <id>com.adbwireless.plugin</id>
+    <name>ADB Wireless Manager</name>
+    <vendor email="your.email@example.com" url="https://github.com/your-username/adb-wireless-plugin">Rahman Rezaee</vendor>
 
+    <description><![CDATA[
+    <h3>ADB Wireless Manager</h3>
+    <p>A modern, intuitive plugin for managing wireless ADB connections in IntelliJ IDEA and Android Studio.</p>
+
+    <h4>✨ Features:</h4>
+    <ul>
+        <li><strong>One-Click Wireless Connection</strong> - Connect to Android devices over WiFi without cables</li>
+        <li><strong>Device Management</strong> - Save and manage multiple devices for quick access</li>
+        <li><strong>Smart Pairing</strong> - Streamlined pairing process with clear instructions</li>
+        <li><strong>Visual Status Monitoring</strong> - Real-time ADB status and connection feedback</li>
+        <li><strong>Modern UI</strong> - Clean, tabbed interface following IntelliJ design principles</li>
+        <li><strong>Quick Actions</strong> - Tools menu integration and keyboard shortcuts</li>
+    </ul>
+
+    <h4>🚀 Quick Start:</h4>
+    <ol>
+        <li>Enable "Wireless debugging" on your Android device (Developer Options)</li>
+        <li>Open the ADB Wireless tool window (right sidebar)</li>
+        <li>Enter device name and IP address</li>
+        <li>Pair once using the pairing code</li>
+        <li>Connect and start debugging wirelessly!</li>
+    </ol>
+
+    <h4>💡 Pro Tips:</h4>
+    <ul>
+        <li>Use "Quick Connect" from Tools menu for instant access to recent devices</li>
+        <li>Save devices for easy reconnection after restarts</li>
+        <li>Check the Console tab for detailed connection logs</li>
+    </ul>
+
+    <p><em>Perfect for developers who want to debug Android apps without the hassle of USB cables!</em></p>
+    ]]></description>
+
+    <!-- Compatibility -->
+    <idea-version since-build="243"/>
     <depends>com.intellij.modules.platform</depends>
 
-    <resource-bundle>messages.MyBundle</resource-bundle>
-
+    <!-- Extensions -->
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow factoryClass="com.github.rahmanrezaee.adbwirelessplugin.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
-        <postStartupActivity implementation="com.github.rahmanrezaee.adbwirelessplugin.startup.MyProjectActivity" />
+        <!-- Tool Window -->
+        <toolWindow id="ADB Wireless"
+                    anchor="right"
+                    factoryClass="com.adbwireless.toolWindow.ADBWirelessToolWindowFactory"/>
+
+        <!-- Notification Groups -->
+        <notificationGroup id="ADB Wireless Manager"
+                           displayType="BALLOON"/>
     </extensions>
+
+    <!-- Actions -->
+    <actions>
+        <!-- Main action group -->
+        <group id="ADBWirelessActions" text="ADB Wireless" description="Wireless ADB connection management">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+
+            <!-- Quick Connect Action -->
+            <action id="com.adbwireless.QuickConnect"
+                    class="com.adbwireless.actions.QuickConnectAction"
+                    text="Quick Connect to Wireless Device"
+                    description="Open ADB Wireless Manager and connect to the most recent device"
+                    icon="AllIcons.General.Web">
+                <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt W"/>
+            </action>
+
+            <separator/>
+
+            <!-- Additional actions -->
+            <action id="com.adbwireless.OpenToolWindow"
+                    class="com.adbwireless.actions.OpenToolWindowAction"
+                    text="Open ADB Wireless Manager"
+                    description="Open the ADB Wireless Manager tool window"
+                    icon="AllIcons.General.Web"/>
+
+            <action id="com.adbwireless.DisconnectAll"
+                    class="com.adbwireless.actions.DisconnectAllAction"
+                    text="Disconnect All ADB Devices"
+                    description="Disconnect all currently connected ADB devices"
+                    icon="AllIcons.Actions.Suspend"/>
+
+            <action id="com.adbwireless.GenerateQRCode"
+                    class="com.adbwireless.actions.GenerateQRCodeAction"
+                    text="Generate QR Code for Wireless Debugging"
+                    description="Generate QR code for wireless ADB debugging"
+                    icon="AllIcons.Actions.Preview"/>
+        </group>
+
+        <!-- Context menu actions -->
+        <group id="ADBWirelessContextActions">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <separator/>
+            <reference id="com.adbwireless.QuickConnect"/>
+            <reference id="com.adbwireless.GenerateQRCode"/>
+        </group>
+
+        <!-- Toolbar actions -->
+        <group id="ADBWirelessToolbar">
+            <add-to-group group-id="MainToolBar" anchor="last"/>
+            <reference id="com.adbwireless.QuickConnect"/>
+            <reference id="com.adbwireless.GenerateQRCode"/>
+        </group>
+    </actions>
+
+    <!-- Change Notes -->
+    <change-notes><![CDATA[
+    <h3>Version 1.0.0</h3>
+    <ul>
+        <li>🎉 Initial release of ADB Wireless Manager</li>
+        <li>✨ Modern tabbed interface with Connect, Devices, and Console tabs</li>
+        <li>📱 Complete wireless ADB workflow support (pair → connect → debug)</li>
+        <li>💾 Device management with persistent storage</li>
+        <li>🚀 Quick Connect action with keyboard shortcut (Ctrl+Alt+W)</li>
+        <li>📊 Real-time ADB status monitoring</li>
+        <li>🎨 IntelliJ-native UI components and styling</li>
+        <li>⚡ Performance optimized with coroutines for async operations</li>
+        <li>📋 Detailed console logging with timestamps</li>
+        <li>🔧 Cross-platform ADB detection (Windows, macOS, Linux)</li>
+    </ul>
+    ]]></change-notes>
 </idea-plugin>
