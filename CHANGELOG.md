@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [1.0.1]
+### Fixed
+- Compatibility improvements for older IDE versions
+- Build process optimizations
+
 ## [1.0.0]
 ### Added
 - Initial release of ADB Wireless Manager
