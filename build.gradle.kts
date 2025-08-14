@@ -15,7 +15,7 @@ version = providers.gradleProperty("pluginVersion").get()
 
 // Set the JVM language level used to build the project
 kotlin {
-    jvmToolchain(21)
+    jvmToolchain(17)
 }
 
 // Configure project's dependencies
@@ -32,6 +32,8 @@ repositories {
 dependencies {
     // IntelliJ Platform Gradle Plugin Dependencies Extension
     intellijPlatform {
+
+//        val localIdeePath = providers.provider { "D:/inteje" }
         // Use different IDE source based on environment
         val localIdeePath = providers.environmentVariable("LOCAL_IDE_PATH")
 
@@ -108,12 +110,12 @@ changelog {
     repositoryUrl = providers.gradleProperty("pluginRepositoryUrl")
 }
 
-// Configure Gradle Kover Plugin for code coverage - DISABLED
+// Configure Gradle Kover Plugin for code coverage
 kover {
     reports {
         total {
             xml {
-                onCheck = false // Disabled since no tests
+                onCheck = true
             }
         }
     }
@@ -127,18 +129,6 @@ tasks {
     publishPlugin {
         dependsOn(patchChangelog)
     }
-
-    // COMPLETELY DISABLE ALL TEST-RELATED TASKS
-    test {
-        enabled = false
-    }
-
-    // Remove test from check dependencies
-    check {
-        dependsOn.remove(test)
-    }
-
-    // DISABLE buildSearchableOptions - causes crashes with our configurable
     buildSearchableOptions {
         enabled = false
     }
@@ -167,6 +157,25 @@ tasks {
             } catch (e: Exception) {
                 println("⚠️ ADB not found, but plugin can still be built: ${e.message}")
             }
+        }
+    }
+
+    // Configure test task
+    test {
+        useJUnitPlatform()
+        testLogging {
+            events("passed", "skipped", "failed")
+        }
+    }
+
+    // Ensure compilation targets Java 17
+    compileJava {
+        options.release.set(17)
+    }
+
+    compileKotlin {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
         }
     }
 }
