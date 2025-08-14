@@ -6,7 +6,7 @@ import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.ui.content.ContentFactory
 
 /**
- * Simple factory for the tool window
+ * Simple factory for the unified tool window
  */
 class ADBWirelessToolWindowFactory : ToolWindowFactory {
 

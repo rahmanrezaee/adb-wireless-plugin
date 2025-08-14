@@ -4,18 +4,19 @@ import com.adbwireless.models.Device
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.*
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
-import kotlinx.coroutines.*
 import java.io.File
 import java.nio.charset.StandardCharsets
-import java.util.concurrent.CompletableFuture
-import java.util.concurrent.TimeUnit
 
 /**
- * Simplified ADB Service to fix ClassNotFoundException and hanging issues
+ * ADB Service with proper IntelliJ logging
  */
 @Service(Service.Level.PROJECT)
 class ADBService(private val project: Project) {
+
+    // Use IntelliJ's logger instead of println
+    private val logger = thisLogger()
 
     data class CommandResult(
         val success: Boolean,
@@ -28,28 +29,36 @@ class ADBService(private val project: Project) {
     private val adbPath = "D:\\Sdk\\platform-tools\\adb.exe"
 
     /**
-     * Execute ADB command using simplified approach
+     * Execute ADB command with proper logging
      */
-    suspend fun executeAdbCommand(vararg args: String): CommandResult = withContext(Dispatchers.IO) {
-        try {
+    fun executeAdbCommand(vararg args: String): CommandResult {
+        return try {
             val commandLine = GeneralCommandLine().apply {
                 exePath = adbPath
                 addParameters(*args)
                 charset = StandardCharsets.UTF_8
-                withEnvironment("ADB_SERVER_SOCKET", "tcp:127.0.0.1:5037")
             }
 
-            println("[ADB] Executing: ${commandLine.commandLineString}")
+            // Use IntelliJ logger - this will appear in IDE logs
+            logger.info("[ADB] Executing: ${commandLine.commandLineString}")
 
-            val processOutput = executeCommandSimple(commandLine, 30000)
+            val processOutput = CapturingProcessHandler(commandLine).runProcess(30000)
 
             val success = processOutput.exitCode == 0
             val outputStr = processOutput.stdout.trim()
             val errorStr = processOutput.stderr.trim()
 
-            println("[ADB] Exit code: ${processOutput.exitCode}")
-            println("[ADB] Output: '$outputStr'")
-            println("[ADB] Error: '$errorStr'")
+            logger.info("[ADB] Exit code: ${processOutput.exitCode}")
+            logger.info("[ADB] Output: '$outputStr'")
+            if (errorStr.isNotEmpty()) {
+                logger.warn("[ADB] Error: '$errorStr'")
+            }
+
+            // Check if we need to start ADB server
+            if (!success && errorStr.contains("cannot connect to daemon")) {
+                logger.info("[ADB] ADB server not running, attempting to start...")
+                return startServerAndRetry(*args)
+            }
 
             CommandResult(
                 success = success,
@@ -60,8 +69,7 @@ class ADBService(private val project: Project) {
             )
 
         } catch (e: Exception) {
-            println("[ADB] Exception: ${e.message}")
-            e.printStackTrace()
+            logger.error("[ADB] Exception: ${e.message}", e)
             CommandResult(
                 success = false,
                 output = "",
@@ -72,31 +80,134 @@ class ADBService(private val project: Project) {
     }
 
     /**
-     * FIXED: Simplified pairing using blocking approach to avoid coroutine issues
+     * Start ADB server and retry the command
      */
-    suspend fun pairDevice(ip: String, port: String, code: String): CommandResult = withContext(Dispatchers.IO) {
-        println("[ADB] Starting pairing: $ip:$port with code: $code")
+    private fun startServerAndRetry(vararg originalArgs: String): CommandResult {
+        logger.info("[ADB] Starting ADB server...")
 
-        try {
+        val startResult = startAdbServer()
+        if (!startResult.success) {
+            logger.error("[ADB] Failed to start server: ${startResult.error}")
+            return CommandResult(
+                success = false,
+                output = "",
+                error = "Failed to start ADB server: ${startResult.error}",
+                fullOutput = "SERVER_START_FAILED: ${startResult.fullOutput}"
+            )
+        }
+
+        logger.info("[ADB] ADB server started, retrying original command...")
+        Thread.sleep(2000)
+
+        return try {
+            val commandLine = GeneralCommandLine().apply {
+                exePath = adbPath
+                addParameters(*originalArgs)
+                charset = StandardCharsets.UTF_8
+            }
+
+            val processOutput = CapturingProcessHandler(commandLine).runProcess(30000)
+
+            val success = processOutput.exitCode == 0
+            val outputStr = processOutput.stdout.trim()
+            val errorStr = processOutput.stderr.trim()
+
+            logger.info("[ADB] Retry result - Exit code: ${processOutput.exitCode}")
+
+            CommandResult(
+                success = success,
+                output = outputStr,
+                error = errorStr,
+                exitCode = processOutput.exitCode,
+                fullOutput = "EXIT: ${processOutput.exitCode}\nSTDOUT:\n$outputStr\nSTDERR:\n$errorStr"
+            )
+
+        } catch (e: Exception) {
+            logger.error("[ADB] Retry failed: ${e.message}", e)
+            CommandResult(
+                success = false,
+                output = "",
+                error = "Retry failed: ${e.message}",
+                fullOutput = "RETRY_EXCEPTION: ${e.message}"
+            )
+        }
+    }
+
+    /**
+     * Start ADB server explicitly
+     */
+    private fun startAdbServer(): CommandResult {
+        return try {
+            val commandLine = GeneralCommandLine().apply {
+                exePath = adbPath
+                addParameters("start-server")
+                charset = StandardCharsets.UTF_8
+            }
+
+            logger.info("[ADB] Starting server: ${commandLine.commandLineString}")
+            val processOutput = CapturingProcessHandler(commandLine).runProcess(15000)
+
+            val success = processOutput.exitCode == 0
+            val outputStr = processOutput.stdout.trim()
+            val errorStr = processOutput.stderr.trim()
+
+            logger.info("[ADB] Server start - Exit code: ${processOutput.exitCode}")
+            logger.info("[ADB] Server start - Output: '$outputStr'")
+            if (errorStr.isNotEmpty()) {
+                logger.warn("[ADB] Server start - Error: '$errorStr'")
+            }
+
+            CommandResult(
+                success = success,
+                output = outputStr,
+                error = errorStr,
+                exitCode = processOutput.exitCode,
+                fullOutput = "EXIT: ${processOutput.exitCode}\nSTDOUT:\n$outputStr\nSTDERR:\n$errorStr"
+            )
+
+        } catch (e: Exception) {
+            logger.error("[ADB] Server start exception: ${e.message}", e)
+            CommandResult(
+                success = false,
+                output = "",
+                error = "Server start exception: ${e.message}",
+                fullOutput = "SERVER_START_EXCEPTION: ${e.message}"
+            )
+        }
+    }
+
+    /**
+     * Pair device with automatic server handling
+     */
+    fun pairDevice(ip: String, port: String, code: String): CommandResult {
+        logger.info("[ADB] Starting pairing: $ip:$port with code: $code")
+
+        return try {
             val commandLine = GeneralCommandLine().apply {
                 exePath = adbPath
                 addParameters("pair", "$ip:$port", code)
                 charset = StandardCharsets.UTF_8
-                withEnvironment("ADB_SERVER_SOCKET", "tcp:127.0.0.1:5037")
             }
 
-            println("[ADB] Executing: ${commandLine.commandLineString}")
+            logger.info("[ADB] Executing pairing: ${commandLine.commandLineString}")
 
-            // Use simplified execution method
-            val processOutput = executeCommandSimple(commandLine, 20000)
+            val processOutput = CapturingProcessHandler(commandLine).runProcess(20000)
 
             val outputStr = processOutput.stdout.trim()
             val errorStr = processOutput.stderr.trim()
             val exitCode = processOutput.exitCode
 
-            println("[ADB] Pairing completed - Exit code: $exitCode")
-            println("[ADB] Pairing output: '$outputStr'")
-            println("[ADB] Pairing error: '$errorStr'")
+            logger.info("[ADB] Pairing completed - Exit code: $exitCode")
+            logger.info("[ADB] Pairing output: '$outputStr'")
+            if (errorStr.isNotEmpty()) {
+                logger.warn("[ADB] Pairing error: '$errorStr'")
+            }
+
+            // Check if we need to start server and retry
+            if (exitCode != 0 && errorStr.contains("cannot connect to daemon")) {
+                logger.info("[ADB] Server not running for pairing, starting and retrying...")
+                return startServerAndRetryPairing(ip, port, code)
+            }
 
             // Enhanced success detection
             val combinedOutput = "$outputStr $errorStr".lowercase()
@@ -106,7 +217,7 @@ class ADBService(private val project: Project) {
                             (outputStr.isNotEmpty() && !combinedOutput.contains("failed") && !combinedOutput.contains("error"))
                     )
 
-            println("[ADB] Final pairing result - Success: $success")
+            logger.info("[ADB] Final pairing result - Success: $success")
 
             CommandResult(
                 success = success,
@@ -117,8 +228,7 @@ class ADBService(private val project: Project) {
             )
 
         } catch (e: Exception) {
-            println("[ADB] Pairing exception: ${e.message}")
-            e.printStackTrace()
+            logger.error("[ADB] Pairing exception: ${e.message}", e)
             CommandResult(
                 success = false,
                 output = "",
@@ -128,128 +238,102 @@ class ADBService(private val project: Project) {
         }
     }
 
-    /**
-     * Simplified command execution using CompletableFuture to avoid coroutine issues
-     */
-    private fun executeCommandSimple(commandLine: GeneralCommandLine, timeoutMs: Long): ProcessOutput {
+    private fun startServerAndRetryPairing(ip: String, port: String, code: String): CommandResult {
+        logger.info("[ADB] Starting server for pairing retry...")
+
+        val startResult = startAdbServer()
+        if (!startResult.success) {
+            logger.error("[ADB] Failed to start server for pairing: ${startResult.error}")
+            return CommandResult(
+                success = false,
+                output = "",
+                error = "Failed to start ADB server for pairing: ${startResult.error}",
+                fullOutput = "PAIRING_SERVER_START_FAILED: ${startResult.fullOutput}"
+            )
+        }
+
+        Thread.sleep(3000)
+
         return try {
-            val handler = CapturingProcessHandler(
-                commandLine.createProcess(),
-                commandLine.charset,
-                commandLine.commandLineString
+            val commandLine = GeneralCommandLine().apply {
+                exePath = adbPath
+                addParameters("pair", "$ip:$port", code)
+                charset = StandardCharsets.UTF_8
+            }
+
+            logger.info("[ADB] Retrying pairing: ${commandLine.commandLineString}")
+            val processOutput = CapturingProcessHandler(commandLine).runProcess(20000)
+
+            val outputStr = processOutput.stdout.trim()
+            val errorStr = processOutput.stderr.trim()
+            val exitCode = processOutput.exitCode
+
+            val combinedOutput = "$outputStr $errorStr".lowercase()
+            val success = exitCode == 0 && (
+                    combinedOutput.contains("successfully paired") ||
+                            combinedOutput.contains("paired to") ||
+                            (outputStr.isNotEmpty() && !combinedOutput.contains("failed") && !combinedOutput.contains("error"))
+                    )
+
+            logger.info("[ADB] Pairing retry result - Success: $success")
+
+            CommandResult(
+                success = success,
+                output = outputStr,
+                error = errorStr,
+                exitCode = exitCode,
+                fullOutput = "EXIT: $exitCode\nSTDOUT:\n$outputStr\nSTDERR:\n$errorStr"
             )
 
-            println("[ADB] Process handler created, starting...")
-
-            // Use CompletableFuture instead of coroutines to avoid ClassNotFoundException
-            val future = CompletableFuture<ProcessOutput>()
-
-            handler.addProcessListener(object : ProcessAdapter() {
-                override fun processTerminated(event: ProcessEvent) {
-                    println("[ADB] Process terminated with exit code: ${event.exitCode}")
-                    try {
-                        val output = handler.runProcess(2000) // 2 seconds for final output collection
-                        println("[ADB] Got process output: stdout='${output.stdout}', stderr='${output.stderr}'")
-                        future.complete(output)
-                    } catch (e: Exception) {
-                        println("[ADB] Error getting process output: ${e.message}")
-                        val emptyOutput = ProcessOutput().apply {
-                            exitCode = event.exitCode
-                            appendStderr("Error collecting output: ${e.message}")
-                        }
-                        future.complete(emptyOutput)
-                    }
-                }
-            })
-
-            handler.startNotify()
-            println("[ADB] Process started, waiting for completion...")
-
-            // Wait for completion with timeout
-            try {
-                val result = future.get(timeoutMs, TimeUnit.MILLISECONDS)
-                println("[ADB] Process completed successfully")
-                result
-            } catch (e: java.util.concurrent.TimeoutException) {
-                println("[ADB] Process timed out after ${timeoutMs}ms")
-                handler.destroyProcess()
-
-                // Return timeout result
-                ProcessOutput().apply {
-                    appendStderr("Process timed out after ${timeoutMs}ms")
-                    exitCode = -1
-                }
-            } catch (e: Exception) {
-                println("[ADB] Error waiting for process: ${e.message}")
-                handler.destroyProcess()
-
-                ProcessOutput().apply {
-                    appendStderr("Error: ${e.message}")
-                    exitCode = -1
-                }
-            }
-
         } catch (e: Exception) {
-            println("[ADB] Error creating process: ${e.message}")
-            e.printStackTrace()
-
-            ProcessOutput().apply {
-                appendStderr("Failed to create process: ${e.message}")
-                exitCode = -1
-            }
+            logger.error("[ADB] Pairing retry failed: ${e.message}", e)
+            CommandResult(
+                success = false,
+                output = "",
+                error = "Pairing retry failed: ${e.message}",
+                fullOutput = "PAIRING_RETRY_EXCEPTION: ${e.message}"
+            )
         }
     }
 
-    /**
-     * Connect to device
-     */
-    suspend fun connectDevice(device: Device): CommandResult {
+    // Rest of the methods (connectDevice, disconnectDevice, etc.) with logger instead of println
+    fun connectDevice(device: Device): CommandResult {
+        logger.info("[ADB] Connecting to device: ${device.getConnectAddress()}")
         return executeAdbCommand("connect", device.getConnectAddress())
     }
 
-    /**
-     * Disconnect from device
-     */
-    suspend fun disconnectDevice(device: Device): CommandResult {
+    fun disconnectDevice(device: Device): CommandResult {
+        logger.info("[ADB] Disconnecting from device: ${device.getConnectAddress()}")
         return executeAdbCommand("disconnect", device.getConnectAddress())
     }
 
-    /**
-     * List connected devices
-     */
-    suspend fun listDevices(): CommandResult {
+    fun listDevices(): CommandResult {
+        logger.info("[ADB] Listing connected devices")
         return executeAdbCommand("devices", "-l")
     }
 
-    /**
-     * Check if ADB is available
-     */
-    suspend fun checkAdbAvailability(): CommandResult {
+    fun checkAdbAvailability(): CommandResult {
         val adbFile = File(adbPath)
         if (!adbFile.exists()) {
+            logger.warn("[ADB] ADB not found at: $adbPath")
             return CommandResult(false, "", "ADB not found at: $adbPath")
         }
+        logger.info("[ADB] Checking ADB availability")
         return executeAdbCommand("version")
     }
 
-    /**
-     * Restart ADB server
-     */
-    suspend fun restartAdbServer(): CommandResult {
-        println("[ADB] Restarting ADB server...")
+    fun restartAdbServer(): CommandResult {
+        logger.info("[ADB] Restarting ADB server...")
         val killResult = executeAdbCommand("kill-server")
         if (killResult.success) {
-            delay(2000) // Wait for server to shut down
-            return executeAdbCommand("start-server")
+            Thread.sleep(2000)
+            return startAdbServer()
         }
         return killResult
     }
 
-    /**
-     * Clear existing connections to a device
-     */
-    suspend fun clearDeviceConnections(ipAddress: String): CommandResult {
-        println("[ADB] Clearing existing connections to $ipAddress")
+    fun clearDeviceConnections(ipAddress: String): CommandResult {
+        logger.info("[ADB] Clearing existing connections to $ipAddress")
 
         val devicesResult = listDevices()
         if (!devicesResult.success) {
@@ -265,6 +349,7 @@ class ADBService(private val project: Project) {
             }
 
         if (connectionsToDisconnect.isEmpty()) {
+            logger.info("[ADB] No existing connections to disconnect for $ipAddress")
             return CommandResult(true, "No existing connections to disconnect", "")
         }
 
@@ -272,6 +357,7 @@ class ADBService(private val project: Project) {
         val results = mutableListOf<String>()
 
         for (address in connectionsToDisconnect) {
+            logger.info("[ADB] Disconnecting existing connection: $address")
             val disconnectResult = executeAdbCommand("disconnect", address)
             results.add("Disconnect $address: ${if (disconnectResult.success) "OK" else "FAILED"}")
             if (!disconnectResult.success) {

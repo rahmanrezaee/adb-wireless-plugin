@@ -1,49 +1,56 @@
 package com.adbwireless.toolWindow
 
-import com.adbwireless.dialogs.EditDeviceDialog
-import com.adbwireless.dialogs.PairDeviceDialog
+import com.adbwireless.dialogs.UnifiedDeviceDialog
 import com.adbwireless.models.Device
 import com.adbwireless.services.ADBService
 import com.adbwireless.services.SettingsService
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
+import com.intellij.openapi.progress.ProgressIndicator
+import com.intellij.openapi.progress.ProgressManager
+import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
+import com.intellij.ui.JBColor
 import com.intellij.ui.components.*
 import com.intellij.ui.dsl.builder.*
 import com.intellij.util.ui.JBUI
-import kotlinx.coroutines.*
+import com.intellij.util.ui.UIUtil
 import java.awt.*
 import javax.swing.*
 
 /**
- * Enhanced ADB Wireless Manager Tool Window with better error handling
+ * Modern ADB Wireless Manager Tool Window
  */
 class ADBWirelessToolWindow(private val project: Project) {
 
     private val adbService = project.service<ADBService>()
     private val settingsService = SettingsService.getInstance()
-    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    // UI Components
-    private val deviceListModel = DefaultListModel<Device>()
-    private val deviceList = JBList(deviceListModel).apply {
-        selectionMode = ListSelectionModel.SINGLE_SELECTION
-        cellRenderer = DeviceListRenderer()
-    }
-
-    private val statusLabel = JLabel("Ready")
     private val outputArea = JBTextArea().apply {
         isEditable = false
-        rows = 10
-        font = Font("Monospaced", Font.PLAIN, 11)
-        text = "ADB Wireless Manager - Enhanced Version\n"
+        rows = 12
+        font = Font("JetBrains Mono", Font.PLAIN, 12)
+        text = "🚀 ADB Wireless Manager - Ready\n"
+        background = JBColor.namedColor("Editor.background", UIUtil.getTextFieldBackground())
+        border = JBUI.Borders.empty(12)
     }
 
-    // Button references for enabling/disabling
-    private lateinit var connectButton: JButton
-    private lateinit var disconnectButton: JButton
-    private lateinit var pairButton: JButton
+    // Custom device list panel
+    private val deviceListPanel = JPanel().apply {
+        layout = BoxLayout(this, BoxLayout.Y_AXIS)
+        border = JBUI.Borders.empty(8)
+        background = UIUtil.getListBackground()
+    }
+
+    // Device with connection status
+    data class DeviceWithStatus(
+        val device: Device,
+        var isConnected: Boolean = false
+    )
+
+    private var deviceList = mutableListOf<DeviceWithStatus>()
 
     init {
         loadDevices()
@@ -52,73 +59,63 @@ class ADBWirelessToolWindow(private val project: Project) {
 
     fun getContent(): JComponent {
         return panel {
+            // Device Management Section
             group("Device Management") {
+                // Modern toolbar with better spacing
                 row {
-                    pairButton = button("Pair New Device") {
-                        showPairDeviceDialog()
+                    button("Add New Device") {
+                        showAddDeviceDialog()
                     }.apply {
-                        component.icon = AllIcons.General.Web
-                        component.preferredSize = Dimension(140, 30)
-                    }.component
-
-                    button("Edit Device") {
-                        editSelectedDevice()
-                    }.apply {
-                        component.icon = AllIcons.Actions.Edit
-                    }
-
-                    button("Remove Device") {
-                        removeSelectedDevice()
-                    }.apply {
-                        component.icon = AllIcons.General.Remove
+                        component.icon = AllIcons.General.Add
+                        component.preferredSize = Dimension(150, 34)
+                        component.toolTipText = "Add and configure a new Android device"
+                        component.font = UIUtil.getLabelFont(UIUtil.FontSize.NORMAL)
                     }
 
                     button("Refresh List") {
-                        loadDevices()
+                        refreshDeviceList()
                     }.apply {
                         component.icon = AllIcons.Actions.Refresh
-                    }
-                }
-
-                row {
-                    scrollCell(deviceList)
-                        .align(Align.FILL)
-                        .resizableColumn()
-                }.resizableRow()
-            }
-
-            group("Connection Actions") {
-                row {
-                    connectButton = button("Connect") {
-                        connectToSelectedDevice()
-                    }.apply {
-                        component.icon = AllIcons.Actions.Execute
-                        component.preferredSize = Dimension(100, 30)
-                    }.component
-
-                    disconnectButton = button("Disconnect") {
-                        disconnectFromSelectedDevice()
-                    }.apply {
-                        component.icon = AllIcons.Actions.Suspend
-                        component.preferredSize = Dimension(100, 30)
-                    }.component
-
-                    button("List Connected") {
-                        listConnectedDevices()
-                    }.apply {
-                        component.icon = AllIcons.Actions.Show
+                        component.preferredSize = Dimension(120, 34)
+                        component.toolTipText = "Refresh device list and check connection status"
+                        component.font = UIUtil.getLabelFont(UIUtil.FontSize.NORMAL)
                     }
 
                     button("Restart ADB") {
                         restartAdbServer()
                     }.apply {
                         component.icon = AllIcons.Actions.Restart
-                        component.toolTipText = "Restart ADB server to fix connection issues"
+                        component.preferredSize = Dimension(120, 34)
+                        component.toolTipText = "Restart ADB server and reset all connections"
+                        component.font = UIUtil.getLabelFont(UIUtil.FontSize.NORMAL)
                     }
                 }
+
+                // Modern device list with better styling
+                row {
+                    val scrollPane = JBScrollPane(deviceListPanel).apply {
+                        preferredSize = Dimension(0, 240)
+                        minimumSize = Dimension(0, 120)
+                        horizontalScrollBarPolicy = JScrollPane.HORIZONTAL_SCROLLBAR_NEVER
+                        verticalScrollBarPolicy = JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
+                        border = JBUI.Borders.compound(
+                            JBUI.Borders.customLine(JBColor.border()),
+                            JBUI.Borders.empty(4)
+                        )
+                        background = UIUtil.getListBackground()
+                    }
+                    cell(scrollPane)
+                        .align(Align.FILL)
+                        .resizableColumn()
+                }.resizableRow()
             }
 
-            group("Debug Output") {
+            // Spacing between sections
+            separator()
+
+
+            // Activity Log Section
+            group("Activity Log") {
                 row {
                     scrollCell(outputArea)
                         .align(Align.FILL)
@@ -126,287 +123,347 @@ class ADBWirelessToolWindow(private val project: Project) {
                 }.resizableRow()
 
                 row {
-                    button("Clear Output") {
+                    button("Clear Log") {
                         clearOutput()
+                    }.apply {
+                        component.icon = AllIcons.Actions.GC
+                        component.toolTipText = "Clear the activity log"
                     }
 
-                    button("Copy Output") {
+                    button("Copy Log") {
                         copyOutputToClipboard()
+                    }.apply {
+                        component.icon = AllIcons.Actions.Copy
+                        component.toolTipText = "Copy log contents to clipboard"
                     }
-                }
-            }
 
-            group("Status") {
-                row {
-                    cell(statusLabel).apply {
-                        component.foreground = Color.BLUE
+                    // Add a spacer and status indicator
+                    comment("").apply {
+                        component.preferredSize = Dimension(20, 0)
+                    }
+
+                    text("💡 Green dot = Connected  •  Red dot = Disconnected").apply {
+                        component.font = UIUtil.getLabelFont(UIUtil.FontSize.SMALL)
+                        component.foreground = JBColor.namedColor("Label.infoForeground", JBColor.GRAY)
                     }
                 }
             }
         }.apply {
-            border = JBUI.Borders.empty(8)
+            border = JBUI.Borders.empty(16, 20, 20, 20)
         }
     }
 
-    private fun showPairDeviceDialog() {
-        val dialog = PairDeviceDialog(project) { device ->
-            loadDevices()
-            addOutput("✅ Device '${device.name}' paired and added successfully")
-            addOutput("💡 Tip: You can now connect to this device")
+    private fun createDevicePanel(deviceWithStatus: DeviceWithStatus): JPanel {
+        val panel = JPanel(BorderLayout()).apply {
+            border = JBUI.Borders.compound(
+                JBUI.Borders.customLineBottom(JBColor.border()),
+                JBUI.Borders.empty(12, 16, 12, 16)
+            )
+            background = UIUtil.getListBackground()
+            maximumSize = Dimension(Int.MAX_VALUE, 60)
+        }
 
-            // Try to select the newly added device
-            selectDeviceByIp(device.ip)
+        // Left side: Icon and device info
+        val leftPanel = JPanel(FlowLayout(FlowLayout.LEFT, 12, 8)).apply {
+            background = UIUtil.getListBackground()
+
+            // Modern connection status indicator
+            val statusIndicator = JPanel().apply {
+                preferredSize = Dimension(10, 10)
+                background = if (deviceWithStatus.isConnected) {
+                    JBColor.namedColor("Plugins.Button.installForeground", JBColor.GREEN)
+                } else {
+                    JBColor.namedColor("Component.errorFocusColor", JBColor.RED)
+                }
+                border = JBUI.Borders.empty(2)
+            }
+
+            val deviceInfoPanel = JPanel().apply {
+                layout = BoxLayout(this, BoxLayout.Y_AXIS)
+                background = UIUtil.getListBackground()
+
+                val nameLabel = JLabel(deviceWithStatus.device.name).apply {
+                    font = UIUtil.getLabelFont(UIUtil.FontSize.NORMAL).deriveFont(Font.BOLD)
+                    foreground = UIUtil.getLabelForeground()
+                }
+
+                val addressLabel = JLabel("${deviceWithStatus.device.ip}:${deviceWithStatus.device.port}").apply {
+                    font = UIUtil.getLabelFont(UIUtil.FontSize.SMALL)
+                    foreground = JBColor.namedColor("Label.infoForeground", JBColor.GRAY)
+                }
+
+                add(nameLabel)
+                add(Box.createVerticalStrut(2))
+                add(addressLabel)
+            }
+
+            add(statusIndicator)
+            add(deviceInfoPanel)
+        }
+
+        // Right side: Action buttons with modern styling
+        val rightPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 8, 8)).apply {
+            background = UIUtil.getListBackground()
+
+            if (deviceWithStatus.isConnected) {
+                // Connected device: Only show Disconnect button
+                val disconnectBtn = JButton("Disconnect").apply {
+                    preferredSize = Dimension(90, 28)
+                    font = UIUtil.getLabelFont(UIUtil.FontSize.SMALL)
+                    toolTipText = "Disconnect from this device"
+                    foreground = JBColor.namedColor("Component.errorFocusColor", JBColor.RED)
+                    addActionListener {
+                        disconnectFromDevice(deviceWithStatus)
+                    }
+                }
+                add(disconnectBtn)
+            } else {
+                // Disconnected device: Show Edit and Remove buttons
+                val editBtn = JButton("Edit").apply {
+                    preferredSize = Dimension(60, 28)
+                    font = UIUtil.getLabelFont(UIUtil.FontSize.SMALL)
+                    toolTipText = "Edit device settings, pair, or connect"
+                    addActionListener {
+                        showEditDeviceDialog(deviceWithStatus)
+                    }
+                }
+
+                val removeBtn = JButton("Remove").apply {
+                    preferredSize = Dimension(70, 28)
+                    font = UIUtil.getLabelFont(UIUtil.FontSize.SMALL)
+                    foreground = JBColor.namedColor("Component.errorFocusColor", JBColor.RED)
+                    toolTipText = "Remove device from list"
+                    addActionListener {
+                        removeDevice(deviceWithStatus)
+                    }
+                }
+
+                add(editBtn)
+                add(removeBtn)
+            }
+        }
+
+        panel.add(leftPanel, BorderLayout.WEST)
+        panel.add(rightPanel, BorderLayout.EAST)
+
+        return panel
+    }
+
+    private fun rebuildDeviceList() {
+        SwingUtilities.invokeLater {
+            deviceListPanel.removeAll()
+            deviceListPanel.background = UIUtil.getListBackground()
+
+            if (deviceList.isEmpty()) {
+                // Modern empty state
+                val emptyPanel = JPanel().apply {
+                    layout = BoxLayout(this, BoxLayout.Y_AXIS)
+                    background = UIUtil.getListBackground()
+                    border = JBUI.Borders.empty(40, 20, 40, 20)
+
+                    val iconLabel = JLabel(AllIcons.General.Information).apply {
+                        alignmentX = Component.CENTER_ALIGNMENT
+                    }
+
+                    val messageLabel = JLabel("No devices configured yet").apply {
+                        font = UIUtil.getLabelFont(UIUtil.FontSize.NORMAL).deriveFont(Font.BOLD)
+                        foreground = UIUtil.getLabelForeground()
+                        alignmentX = Component.CENTER_ALIGNMENT
+                    }
+
+                    val instructionLabel = JLabel("Click 'Add New Device' to get started").apply {
+                        font = UIUtil.getLabelFont(UIUtil.FontSize.SMALL)
+                        foreground = JBColor.namedColor("Label.infoForeground", JBColor.GRAY)
+                        alignmentX = Component.CENTER_ALIGNMENT
+                    }
+
+                    add(iconLabel)
+                    add(Box.createVerticalStrut(8))
+                    add(messageLabel)
+                    add(Box.createVerticalStrut(4))
+                    add(instructionLabel)
+                }
+                deviceListPanel.add(emptyPanel)
+            } else {
+                // Add device panels
+                deviceList.forEach { deviceWithStatus ->
+                    deviceListPanel.add(createDevicePanel(deviceWithStatus))
+                }
+            }
+
+            deviceListPanel.revalidate()
+            deviceListPanel.repaint()
+        }
+    }
+
+    private fun showAddDeviceDialog() {
+        val dialog = UnifiedDeviceDialog(project, null) { device ->
+            loadDevices()
+            addOutput("✅ Device '${device.name}' added successfully")
         }
         dialog.show()
     }
 
-    private fun editSelectedDevice() {
-        val selectedDevice = deviceList.selectedValue
-        if (selectedDevice == null) {
-            Messages.showWarningDialog(project, "Please select a device to edit", "No Device Selected")
-            return
-        }
-
-        val dialog = EditDeviceDialog(project, selectedDevice) { updatedDevice ->
+    private fun showEditDeviceDialog(deviceWithStatus: DeviceWithStatus) {
+        val dialog = UnifiedDeviceDialog(project, deviceWithStatus.device) { updatedDevice ->
             loadDevices()
             addOutput("✅ Device '${updatedDevice.name}' updated successfully")
-            selectDeviceByIp(updatedDevice.ip)
         }
         dialog.show()
     }
 
-    private fun removeSelectedDevice() {
-        val selectedDevice = deviceList.selectedValue
-        if (selectedDevice == null) {
-            Messages.showWarningDialog(project, "Please select a device to remove", "No Device Selected")
-            return
-        }
+    private fun disconnectFromDevice(deviceWithStatus: DeviceWithStatus) {
+        addOutput("🔌 Disconnecting from ${deviceWithStatus.device.getConnectAddress()}...")
 
+        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Disconnecting from Device", false) {
+            override fun run(indicator: ProgressIndicator) {
+                try {
+                    indicator.text = "Disconnecting from ${deviceWithStatus.device.name}..."
+                    val result = adbService.disconnectDevice(deviceWithStatus.device)
+
+                    ApplicationManager.getApplication().invokeLater {
+                        if (result.success) {
+                            addOutput("✅ Disconnected from ${deviceWithStatus.device.name}")
+                            refreshDeviceList()
+                        } else {
+                            addOutput("❌ Failed to disconnect from ${deviceWithStatus.device.name}")
+                            if (result.error.isNotEmpty()) {
+                                addOutput("⚠️ Error: ${result.error}")
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    ApplicationManager.getApplication().invokeLater {
+                        addOutput("💥 Exception during disconnect: ${e.message}")
+                    }
+                }
+            }
+        })
+    }
+
+    private fun removeDevice(deviceWithStatus: DeviceWithStatus) {
         val result = Messages.showYesNoDialog(
             project,
-            "Remove device '${selectedDevice.name}' (${selectedDevice.ip})?",
+            "Remove device '${deviceWithStatus.device.name}' (${deviceWithStatus.device.ip})?",
             "Confirm Removal",
             Messages.getQuestionIcon()
         )
 
         if (result == Messages.YES) {
-            settingsService.removeDevice(selectedDevice.ip)
+            settingsService.removeDevice(deviceWithStatus.device.ip)
             loadDevices()
-            addOutput("🗑️ Device '${selectedDevice.name}' removed from list")
+            addOutput("🗑️ Device '${deviceWithStatus.device.name}' removed from list")
         }
     }
 
-    private fun connectToSelectedDevice() {
-        val device = deviceList.selectedValue
-        if (device == null) {
-            Messages.showWarningDialog(project, "Please select a device to connect to", "No Device Selected")
-            return
-        }
+    private fun refreshDeviceList() {
+        addOutput("🔄 Refreshing device list and connection status...")
 
-        setButtonsEnabled(false)
-        updateStatus("Connecting to ${device.name}...")
-        addOutput("🔗 Connecting to ${device.getConnectAddress()}...")
-
-        scope.launch {
-            try {
-                // First, clear any existing connections to this device
-                val clearResult = adbService.clearDeviceConnections(device.ip)
-                if (clearResult.success && clearResult.output.isNotEmpty()) {
-                    SwingUtilities.invokeLater {
-                        addOutput("🧹 ${clearResult.output}")
-                    }
-                }
-
-                // Brief delay to ensure clean state
-                delay(1000)
-
-                // Now attempt connection
-                val result = adbService.connectDevice(device)
-
-                SwingUtilities.invokeLater {
-                    if (result.success) {
-                        addOutput("✅ Successfully connected to ${device.name}!")
-                        addOutput("📱 Device ready for debugging")
-                        updateStatus("Connected to ${device.name}")
-
-                        // Auto-refresh device list to show connection status
-                        listConnectedDevices()
-                    } else {
-                        addOutput("❌ Failed to connect to ${device.name}")
-                        addOutput("📄 Output: ${result.output}")
-                        if (result.error.isNotEmpty()) {
-                            addOutput("⚠️ Error: ${result.error}")
-                        }
-                        updateStatus("Connection failed")
-
-                        // Provide helpful error suggestions
-                        when {
-                            result.output.contains("failed to connect") -> {
-                                addOutput("💡 Suggestions:")
-                                addOutput("   • Check if device port is correct (usually 5555)")
-                                addOutput("   • Verify device is on same Wi-Fi network")
-                                addOutput("   • Try re-pairing the device if connection was lost")
+        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Refreshing Device List", false) {
+            override fun run(indicator: ProgressIndicator) {
+                try {
+                    val devicesResult = adbService.listDevices()
+                    val connectedAddresses = if (devicesResult.success) {
+                        devicesResult.output.lines()
+                            .filter { it.contains("device") && !it.contains("List of devices") }
+                            .mapNotNull { line ->
+                                val parts = line.split("\\s+".toRegex())
+                                if (parts.isNotEmpty()) parts[0] else null
                             }
-                            result.output.contains("Connection refused") -> {
-                                addOutput("💡 Suggestion: Device may not be accepting connections")
-                                addOutput("   • Enable 'Wireless debugging' on your Android device")
-                                addOutput("   • Check if another ADB instance is connected")
-                            }
+                    } else {
+                        emptyList()
+                    }
+
+                    ApplicationManager.getApplication().invokeLater {
+                        deviceList.clear()
+                        settingsService.getSavedDevices().forEach { device ->
+                            val isConnected = connectedAddresses.contains("${device.ip}:${device.port}")
+                            deviceList.add(DeviceWithStatus(device, isConnected))
+                        }
+
+                        rebuildDeviceList()
+
+                        if (deviceList.isEmpty()) {
+                            addOutput("📝 No saved devices. Use 'Add New Device' to add one.")
+                        } else {
+                            addOutput("📱 Loaded ${deviceList.size} device(s) with connection status")
+                            val connectedCount = deviceList.count { it.isConnected }
+                            addOutput("🔗 Connected devices: $connectedCount")
                         }
                     }
-                    setButtonsEnabled(true)
-                }
-            } catch (e: Exception) {
-                SwingUtilities.invokeLater {
-                    addOutput("💥 Exception during connection: ${e.message}")
-                    updateStatus("Connection error")
-                    setButtonsEnabled(true)
-                }
-            }
-        }
-    }
-
-    private fun disconnectFromSelectedDevice() {
-        val device = deviceList.selectedValue
-        if (device == null) {
-            Messages.showWarningDialog(project, "Please select a device to disconnect", "No Device Selected")
-            return
-        }
-
-        setButtonsEnabled(false)
-        updateStatus("Disconnecting from ${device.name}...")
-        addOutput("🔌 Disconnecting from ${device.getConnectAddress()}...")
-
-        scope.launch {
-            try {
-                val result = adbService.disconnectDevice(device)
-                SwingUtilities.invokeLater {
-                    if (result.success) {
-                        addOutput("✅ Disconnected from ${device.name}")
-                        updateStatus("Disconnected")
-
-                        // Refresh to show updated connection status
-                        listConnectedDevices()
-                    } else {
-                        addOutput("❌ Failed to disconnect from ${device.name}")
-                        if (result.error.isNotEmpty()) {
-                            addOutput("⚠️ Error: ${result.error}")
-                        }
-                        updateStatus("Disconnect failed")
+                } catch (e: Exception) {
+                    ApplicationManager.getApplication().invokeLater {
+                        addOutput("❌ Error refreshing device list: ${e.message}")
                     }
-                    setButtonsEnabled(true)
-                }
-            } catch (e: Exception) {
-                SwingUtilities.invokeLater {
-                    addOutput("💥 Exception during disconnect: ${e.message}")
-                    updateStatus("Disconnect error")
-                    setButtonsEnabled(true)
                 }
             }
-        }
-    }
-
-    private fun listConnectedDevices() {
-        updateStatus("Checking connected devices...")
-        addOutput("📋 Listing all connected devices...")
-
-        scope.launch {
-            try {
-                val result = adbService.listDevices()
-                SwingUtilities.invokeLater {
-                    addOutput("📱 Connected devices:")
-                    if (result.output.isNotEmpty()) {
-                        addOutput(result.output)
-                    } else {
-                        addOutput("   (No devices connected)")
-                    }
-                    updateStatus("Device list updated")
-                }
-            } catch (e: Exception) {
-                SwingUtilities.invokeLater {
-                    addOutput("❌ Error listing devices: ${e.message}")
-                    updateStatus("List failed")
-                }
-            }
-        }
+        })
     }
 
     private fun restartAdbServer() {
-        setButtonsEnabled(false)
-        updateStatus("Restarting ADB server...")
-        addOutput("🔄 Restarting ADB server to fix potential issues...")
+        addOutput("🔄 Restarting ADB server and resetting all connections...")
 
-        scope.launch {
-            try {
-                val result = adbService.restartAdbServer()
-                SwingUtilities.invokeLater {
-                    if (result.success) {
-                        addOutput("✅ ADB server restarted successfully")
-                        addOutput("💡 You can now try connecting to devices")
-                        updateStatus("ADB server restarted")
-                    } else {
-                        addOutput("❌ Failed to restart ADB server")
-                        addOutput("⚠️ Error: ${result.error}")
-                        updateStatus("Restart failed")
+        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Restarting ADB Server", false) {
+            override fun run(indicator: ProgressIndicator) {
+                try {
+                    indicator.text = "Restarting ADB server..."
+                    val result = adbService.restartAdbServer()
+
+                    ApplicationManager.getApplication().invokeLater {
+                        if (result.success) {
+                            addOutput("✅ ADB server restarted successfully")
+                            addOutput("🔌 All device connections have been reset")
+                            refreshDeviceList()
+                        } else {
+                            addOutput("❌ Failed to restart ADB server")
+                            addOutput("⚠️ Error: ${result.error}")
+                        }
                     }
-                    setButtonsEnabled(true)
-
-                    // Re-check ADB status after restart
-                    checkAdbStatus()
-                }
-            } catch (e: Exception) {
-                SwingUtilities.invokeLater {
-                    addOutput("💥 Exception during restart: ${e.message}")
-                    updateStatus("Restart error")
-                    setButtonsEnabled(true)
+                } catch (e: Exception) {
+                    ApplicationManager.getApplication().invokeLater {
+                        addOutput("💥 Exception during restart: ${e.message}")
+                    }
                 }
             }
-        }
+        })
     }
 
     private fun checkAdbStatus() {
-        scope.launch {
-            try {
-                val result = adbService.checkAdbAvailability()
-                SwingUtilities.invokeLater {
-                    if (result.success) {
-                        addOutput("✅ ADB is available and ready")
-                        updateStatus("ADB Ready")
-                    } else {
-                        addOutput("❌ ADB not available: ${result.error}")
-                        addOutput("💡 Make sure Android SDK platform-tools are installed")
-                        updateStatus("ADB Error")
+        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Checking ADB", false) {
+            override fun run(indicator: ProgressIndicator) {
+                try {
+                    val result = adbService.checkAdbAvailability()
+                    ApplicationManager.getApplication().invokeLater {
+                        if (result.success) {
+                            addOutput("✅ ADB is available and ready")
+                        } else {
+                            addOutput("❌ ADB not available: ${result.error}")
+                            addOutput("💡 Make sure Android SDK platform-tools are installed")
+                        }
+                    }
+                } catch (e: Exception) {
+                    ApplicationManager.getApplication().invokeLater {
+                        addOutput("❌ Error checking ADB: ${e.message}")
                     }
                 }
-            } catch (e: Exception) {
-                SwingUtilities.invokeLater {
-                    addOutput("❌ Error checking ADB: ${e.message}")
-                    updateStatus("ADB Error")
-                }
             }
-        }
+        })
     }
 
     private fun loadDevices() {
         SwingUtilities.invokeLater {
-            deviceListModel.clear()
+            deviceList.clear()
             settingsService.getSavedDevices().forEach { device ->
-                deviceListModel.addElement(device)
+                deviceList.add(DeviceWithStatus(device, false))
             }
 
-            if (deviceListModel.isEmpty) {
-                addOutput("📝 No saved devices. Use 'Pair New Device' to add one.")
+            rebuildDeviceList()
+
+            if (deviceList.isEmpty()) {
+                addOutput("📝 No saved devices. Use 'Add New Device' to add one.")
             } else {
-                addOutput("📱 Loaded ${deviceListModel.size} saved device(s)")
-            }
-        }
-    }
-
-    private fun selectDeviceByIp(ip: String) {
-        for (i in 0 until deviceListModel.size()) {
-            if (deviceListModel.getElementAt(i).ip == ip) {
-                deviceList.selectedIndex = i
-                break
+                addOutput("📱 Loaded ${deviceList.size} saved device(s)")
+                refreshDeviceList()
             }
         }
     }
@@ -420,63 +477,14 @@ class ADBWirelessToolWindow(private val project: Project) {
     }
 
     private fun clearOutput() {
-        outputArea.text = "Output cleared.\n"
-        addOutput("🧹 Debug output cleared")
+        outputArea.text = "🚀 ADB Wireless Manager - Log cleared\n"
+        addOutput("🧹 Activity log cleared")
     }
 
     private fun copyOutputToClipboard() {
         val clipboard = Toolkit.getDefaultToolkit().systemClipboard
         val stringSelection = java.awt.datatransfer.StringSelection(outputArea.text)
         clipboard.setContents(stringSelection, null)
-        addOutput("📋 Output copied to clipboard")
-    }
-
-    private fun updateStatus(message: String) {
-        SwingUtilities.invokeLater {
-            statusLabel.text = message
-            statusLabel.foreground = when {
-                message.contains("error", ignoreCase = true) ||
-                        message.contains("failed", ignoreCase = true) -> Color.RED
-                message.contains("success", ignoreCase = true) ||
-                        message.contains("ready", ignoreCase = true) ||
-                        message.contains("connected", ignoreCase = true) -> Color.GREEN
-                else -> Color.BLUE
-            }
-        }
-    }
-
-    private fun setButtonsEnabled(enabled: Boolean) {
-        SwingUtilities.invokeLater {
-            connectButton.isEnabled = enabled
-            disconnectButton.isEnabled = enabled
-            pairButton.isEnabled = enabled
-        }
-    }
-
-    /**
-     * Enhanced device list renderer with connection status
-     */
-    private class DeviceListRenderer : DefaultListCellRenderer() {
-        override fun getListCellRendererComponent(
-            list: JList<*>?,
-            value: Any?,
-            index: Int,
-            isSelected: Boolean,
-            cellHasFocus: Boolean
-        ): Component {
-            super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
-
-            if (value is Device) {
-                text = "${value.name} (${value.ip}:${value.port})"
-                icon = AllIcons.General.Web
-
-                // Visual indication for different states
-                if (!isSelected) {
-                    foreground = Color.BLACK
-                }
-            }
-
-            return this
-        }
+        addOutput("📋 Log copied to clipboard")
     }
 }

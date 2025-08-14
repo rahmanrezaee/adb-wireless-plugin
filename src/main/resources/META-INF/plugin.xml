@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.adbwireless.plugin</id>
-    <name>ADB Wireless Manager - Simple</name>
-    <vendor email="your.email@example.com">Rahman Rezaee</vendor>
+    <name>ADB Wireless Manager</name>
+    <vendor email="rahmanrezaie60@gmail.com">Rahman Rezaee</vendor>
 
     <description><![CDATA[
     <h3>ADB Wireless Manager - Simple Version</h3>
@@ -35,7 +35,8 @@
         <!-- Tool Window -->
         <toolWindow id="ADB Wireless"
                     anchor="right"
-                    factoryClass="com.adbwireless.toolWindow.ADBWirelessToolWindowFactory"/>
+                    factoryClass="com.adbwireless.toolWindow.ADBWirelessToolWindowFactory"
+                    icon="/icons/wifi.svg"/>
 
         <!-- Notification Groups -->
         <notificationGroup id="ADB Wireless Manager"
@@ -51,13 +52,13 @@
                     class="com.adbwireless.actions.OpenToolWindowAction"
                     text="Open ADB Wireless Manager"
                     description="Open the ADB Wireless Manager tool window"
-                    icon="AllIcons.General.Web"/>
+                    icon="/icons/wifi.svg"/>
         </group>
     </actions>
 
     <!-- Change Notes -->
     <change-notes><![CDATA[
-    <h3>Version 1.0.0 - Simple Edition</h3>
+    <h3>Version 1.0.0</h3>
     <ul>
         <li>Clean, minimal interface</li>
         <li>Device list management</li>

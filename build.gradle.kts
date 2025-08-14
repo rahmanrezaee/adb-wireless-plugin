@@ -35,9 +35,6 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.opentest4j)
 
-    // FIXED: Add explicit Kotlin coroutines dependency
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.7.3")
 
     // IntelliJ Platform Gradle Plugin Dependencies Extension
     intellijPlatform {
