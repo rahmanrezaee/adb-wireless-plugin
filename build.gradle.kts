@@ -35,13 +35,19 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.opentest4j)
 
-
     // IntelliJ Platform Gradle Plugin Dependencies Extension
     intellijPlatform {
-        // ✅ Use local IntelliJ installation (no downloads needed)
-        local("D:/inteje")  // Your local IntelliJ path
+        // Use different IDE source based on environment
+        val localIdeePath = providers.environmentVariable("LOCAL_IDE_PATH")
 
-        // ✅ REMOVED Android plugin dependency (not available in IC)
+        if (localIdeePath.isPresent && file(localIdeePath.get()).exists()) {
+            // Use local IDE if path is provided and exists (for local development)
+            local(localIdeePath.get())
+        } else {
+            // Use downloaded IDE (for CI/CD and when local IDE not available)
+            intellijIdeaCommunity(providers.gradleProperty("platformVersion"))
+        }
+
         bundledPlugins(providers.gradleProperty("platformBundledPlugins").map {
             it.split(',').filter { plugin -> plugin.isNotBlank() }
         })
@@ -62,9 +68,6 @@ intellijPlatform {
     pluginConfiguration {
         name = providers.gradleProperty("pluginName")
         version = providers.gradleProperty("pluginVersion")
-
-        // ✅ REMOVED: Description patching that was causing conflicts
-        // The description will come from plugin.xml directly
 
         val changelog = project.changelog // local variable for configuration cache compatibility
         // Get the latest available change notes from the changelog file
@@ -139,7 +142,7 @@ tasks {
         doLast {
             try {
                 val adbPath = if (System.getProperty("os.name").lowercase().contains("windows")) {
-                    "D:/Sdk/platform-tools/adb.exe"
+                    "adb.exe"
                 } else {
                     "adb"
                 }
