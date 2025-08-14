@@ -1,16 +1,24 @@
 package com.adbwireless.dialogs
 
 import com.adbwireless.models.Device
+import com.adbwireless.services.ADBService
+import com.adbwireless.services.SettingsService
+import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
-import com.intellij.ui.components.*
+import com.intellij.openapi.ui.Messages
+import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.*
 import com.intellij.util.ui.JBUI
-import java.awt.*
-import javax.swing.*
+import javax.swing.Action
+import kotlinx.coroutines.*
+import java.awt.Dimension
+import javax.swing.JComponent
+import javax.swing.SwingUtilities
+import javax.swing.AbstractAction
 
 /**
- * Dialog for editing device information
+ * Edit device dialog with re-pair option
  */
 class EditDeviceDialog(
     private val project: Project,
@@ -18,11 +26,12 @@ class EditDeviceDialog(
     private val onDeviceUpdated: (Device) -> Unit
 ) : DialogWrapper(project) {
 
-    // UI Components
+    private val adbService = project.service<ADBService>()
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
     private val deviceNameField = JBTextField(device.name)
     private val deviceIpField = JBTextField(device.ip)
-    private val connectionPortField = JBTextField(device.defaultPort)
-    private val statusLabel = JLabel(" ")
+    private val devicePortField = JBTextField(device.port)
 
     init {
         title = "Edit Device: ${device.name}"
@@ -35,26 +44,28 @@ class EditDeviceDialog(
                 row("Device Name:") {
                     cell(deviceNameField)
                         .align(AlignX.FILL)
-                        .comment("Give your device a memorable name")
                         .focused()
                 }
                 row("IP Address:") {
                     cell(deviceIpField)
                         .align(AlignX.FILL)
-                        .comment("Device IP address for connection")
                 }
-                row("Connection Port:") {
-                    cell(connectionPortField)
-                        .comment("Usually 5555, but may change after device restart")
+                row("Port:") {
+                    cell(devicePortField)
+                        .comment("Usually 5555 for wireless ADB")
                 }
             }
 
-            group("Status") {
+            group("Re-pairing") {
                 row {
-                    cell(statusLabel)
-                        .apply {
-                            component.font = component.font.deriveFont(Font.ITALIC, 12f)
-                        }
+                    button("Re-pair Device") {
+                        repairDevice()
+                    }.apply {
+                        component.toolTipText = "Re-pair this device if connection issues occur"
+                    }
+                }
+                row {
+                    text("Use re-pairing if you get connection errors or 'unauthorized' messages.")
                 }
             }
         }.apply {
@@ -64,62 +75,88 @@ class EditDeviceDialog(
     }
 
     override fun createActions(): Array<Action> {
-        return arrayOf(okAction, cancelAction)
+        return arrayOf(
+            object : AbstractAction("Save Changes") {
+                override fun actionPerformed(e: java.awt.event.ActionEvent?) {
+                    saveChanges()
+                }
+            },
+            cancelAction
+        )
     }
 
-    override fun doOKAction() {
-        if (validateInput()) {
-            val updatedDevice = Device(
-                name = deviceNameField.text.trim(),
-                ip = deviceIpField.text.trim(),
-                defaultPort = connectionPortField.text.trim().ifEmpty { "5555" },
-                lastConnected = device.lastConnected
-            )
-            onDeviceUpdated(updatedDevice)
-            super.doOKAction()
-        }
-    }
-
-    private fun validateInput(): Boolean {
+    private fun saveChanges() {
         val name = deviceNameField.text.trim()
         val ip = deviceIpField.text.trim()
-        val port = connectionPortField.text.trim()
+        val port = devicePortField.text.trim()
 
-        when {
-            name.isEmpty() -> {
-                updateStatus("❌ Please enter a device name", true)
-                deviceNameField.requestFocus()
-                return false
-            }
-            ip.isEmpty() -> {
-                updateStatus("❌ Please enter the device IP address", true)
-                deviceIpField.requestFocus()
-                return false
-            }
-            port.isNotEmpty() && !port.all { it.isDigit() } -> {
-                updateStatus("❌ Port must be a valid number", true)
-                connectionPortField.requestFocus()
-                return false
-            }
-            port.isNotEmpty() && (port.toIntOrNull() ?: 0) !in 1..65535 -> {
-                updateStatus("❌ Port must be between 1 and 65535", true)
-                connectionPortField.requestFocus()
-                return false
-            }
+        if (name.isEmpty() || ip.isEmpty() || port.isEmpty()) {
+            Messages.showErrorDialog(project, "Please fill in all fields", "Validation Error")
+            return
         }
 
-        updateStatus("✅ Device information is valid", false)
-        return true
+        // Remove old device and add updated one
+        val settingsService = SettingsService.getInstance()
+        settingsService.removeDevice(device.ip)
+
+        val updatedDevice = Device(name, ip, port)
+        settingsService.saveDevice(updatedDevice)
+
+        onDeviceUpdated(updatedDevice)
+        super.doOKAction()
     }
 
-    private fun updateStatus(message: String, isError: Boolean = false) {
-        SwingUtilities.invokeLater {
-            statusLabel.text = message
-            statusLabel.foreground = if (isError) {
-                com.intellij.ui.JBColor.RED
-            } else {
-                com.intellij.ui.JBColor.GRAY
+    private fun repairDevice() {
+        val ip = deviceIpField.text.trim()
+
+        if (ip.isEmpty()) {
+            Messages.showErrorDialog(project, "Please enter IP address first", "Validation Error")
+            return
+        }
+
+        // Create a simple re-pair dialog with both port and code fields
+        val repairDialog = RepairDeviceDialog(project, ip) { port, code ->
+            scope.launch {
+                try {
+                    val result = adbService.pairDevice(ip, port, code)
+
+                    SwingUtilities.invokeLater {
+                        if (result.success) {
+                            Messages.showInfoMessage(
+                                project,
+                                "Device re-paired successfully! You can now connect to it.",
+                                "Re-pairing Successful"
+                            )
+                        } else {
+                            val errorMsg = when {
+                                result.error.contains("failed to authenticate") ->
+                                    "Wrong pairing code. Please check and try again."
+                                result.error.contains("connection refused") ->
+                                    "Connection refused. Check IP address and pairing port."
+                                result.error.contains("already paired") ->
+                                    "Device already paired! No need to re-pair."
+                                else ->
+                                    "Re-pairing failed: ${result.error.ifEmpty { result.output }}\n\nFull output: ${result.fullOutput}"
+                            }
+                            Messages.showErrorDialog(project, errorMsg, "Re-pairing Failed")
+                        }
+                    }
+                } catch (e: Exception) {
+                    SwingUtilities.invokeLater {
+                        Messages.showErrorDialog(
+                            project,
+                            "Error during re-pairing: ${e.message}",
+                            "Re-pairing Error"
+                        )
+                    }
+                }
             }
         }
+        repairDialog.show()
+    }
+
+    override fun dispose() {
+        scope.cancel()
+        super.dispose()
     }
 }

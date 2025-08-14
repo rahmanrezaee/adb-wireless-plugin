@@ -31,10 +31,7 @@ repositories {
 
 // Dependencies are managed with Gradle version catalog
 dependencies {
-    // QR Code generation
-    implementation("com.google.zxing:core:3.5.2")
-    implementation("com.google.zxing:javase:3.5.2")
-    
+
     testImplementation(libs.junit)
     testImplementation(libs.opentest4j)
 

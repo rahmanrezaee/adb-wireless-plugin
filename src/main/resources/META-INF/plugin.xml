@@ -1,40 +1,29 @@
 <idea-plugin>
     <id>com.adbwireless.plugin</id>
-    <name>ADB Wireless Manager</name>
-    <vendor email="your.email@example.com" url="https://github.com/your-username/adb-wireless-plugin">Rahman Rezaee</vendor>
+    <name>ADB Wireless Manager - Simple</name>
+    <vendor email="your.email@example.com">Rahman Rezaee</vendor>
 
     <description><![CDATA[
-    <h3>ADB Wireless Manager</h3>
-    <p>A modern, intuitive plugin for managing wireless ADB connections in IntelliJ IDEA and Android Studio.</p>
+    <h3>ADB Wireless Manager - Simple Version</h3>
+    <p>A clean, minimal plugin for managing wireless ADB connections.</p>
 
-    <h4>✨ Features:</h4>
+    <h4>Features:</h4>
     <ul>
-        <li><strong>One-Click Wireless Connection</strong> - Connect to Android devices over WiFi without cables</li>
-        <li><strong>Device Management</strong> - Save and manage multiple devices for quick access</li>
-        <li><strong>Smart Pairing</strong> - Streamlined pairing process with clear instructions</li>
-        <li><strong>Visual Status Monitoring</strong> - Real-time ADB status and connection feedback</li>
-        <li><strong>Modern UI</strong> - Clean, tabbed interface following IntelliJ design principles</li>
-        <li><strong>Quick Actions</strong> - Tools menu integration and keyboard shortcuts</li>
-        <li><strong>Debug Mode</strong> - Comprehensive debugging tools for troubleshooting</li>
+        <li>Add and manage wireless devices</li>
+        <li>Connect/disconnect from devices</li>
+        <li>View connection status and logs</li>
+        <li>Simple, intuitive interface</li>
     </ul>
 
-    <h4>🚀 Quick Start:</h4>
+    <h4>How to use:</h4>
     <ol>
-        <li>Enable "Wireless debugging" on your Android device (Developer Options)</li>
-        <li>Open the ADB Wireless tool window (right sidebar)</li>
-        <li>Enter device name and IP address</li>
-        <li>Pair once using the pairing code</li>
-        <li>Connect and start debugging wirelessly!</li>
+        <li>Open the ADB Wireless tool window</li>
+        <li>Add your device with IP address</li>
+        <li>Click Connect to establish wireless connection</li>
+        <li>Start debugging wirelessly!</li>
     </ol>
 
-    <h4>🛠️ Troubleshooting:</h4>
-    <ul>
-        <li>Use "Test ADB Connection" to verify ADB installation</li>
-        <li>Enable debug mode in Add Device dialog for detailed logs</li>
-        <li>Check that both devices are on the same WiFi network</li>
-    </ul>
-
-    <p><em>Perfect for developers who want to debug Android apps without the hassle of USB cables!</em></p>
+    <p><em>Note: You need to pair your device first using regular ADB commands or Android Studio.</em></p>
     ]]></description>
 
     <!-- Compatibility -->
@@ -53,98 +42,28 @@
                            displayType="BALLOON"/>
     </extensions>
 
-    <!-- Actions -->
+    <!-- Simple Actions -->
     <actions>
-        <!-- Main action group -->
-        <group id="ADBWirelessActions" text="ADB Wireless" description="Wireless ADB connection management">
+        <group id="ADBWirelessSimple" text="ADB Wireless" description="Simple ADB Wireless tools">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
 
-            <!-- Quick Connect Action -->
-            <action id="com.adbwireless.QuickConnect"
-                    class="com.adbwireless.actions.QuickConnectAction"
-                    text="Quick Connect to Wireless Device"
-                    description="Open ADB Wireless Manager and connect to the most recent device"
-                    icon="AllIcons.General.Web">
-                <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt W"/>
-            </action>
-
-            <separator/>
-
-            <!-- Debug and Test Actions -->
-            <action id="com.adbwireless.TestADB"
-                    class="com.adbwireless.actions.QuickADBTestAction"
-                    text="Test ADB Connection"
-                    description="Run comprehensive ADB test and show debug information"
-                    icon="AllIcons.General.InspectionsOK"/>
-
-            <action id="com.adbwireless.DirectADBTest"
-                    class="com.adbwireless.actions.DirectADBTestAction"
-                    text="Direct ADB Test"
-                    description="Test ADB commands directly without service layer"
-                    icon="AllIcons.General.InspectionsOK"/>
-
-            <separator/>
-
-            <!-- Additional actions -->
             <action id="com.adbwireless.OpenToolWindow"
                     class="com.adbwireless.actions.OpenToolWindowAction"
                     text="Open ADB Wireless Manager"
                     description="Open the ADB Wireless Manager tool window"
                     icon="AllIcons.General.Web"/>
-
-            <action id="com.adbwireless.DisconnectAll"
-                    class="com.adbwireless.actions.DisconnectAllAction"
-                    text="Disconnect All ADB Devices"
-                    description="Disconnect all currently connected ADB devices"
-                    icon="AllIcons.Actions.Suspend"/>
-
-            <action id="com.adbwireless.GenerateQRCode"
-                    class="com.adbwireless.actions.GenerateQRCodeAction"
-                    text="Generate QR Code for Wireless Debugging"
-                    description="Generate QR code for wireless ADB debugging"
-                    icon="AllIcons.Actions.Preview"/>
-        </group>
-
-        <!-- Context menu actions -->
-        <group id="ADBWirelessContextActions">
-            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
-            <separator/>
-            <reference id="com.adbwireless.QuickConnect"/>
-            <reference id="com.adbwireless.TestADB"/>
-        </group>
-
-        <!-- Toolbar actions -->
-        <group id="ADBWirelessToolbar">
-            <add-to-group group-id="MainToolBar" anchor="last"/>
-            <reference id="com.adbwireless.QuickConnect"/>
-            <reference id="com.adbwireless.TestADB"/>
         </group>
     </actions>
 
     <!-- Change Notes -->
     <change-notes><![CDATA[
-    <h3>Version 1.0.1 - Debug Edition</h3>
+    <h3>Version 1.0.0 - Simple Edition</h3>
     <ul>
-        <li>🐛 Enhanced debugging capabilities for connection issues</li>
-        <li>🔧 Added comprehensive ADB test action</li>
-        <li>📊 Detailed debug output in Add Device dialog</li>
-        <li>🚀 Improved error handling and troubleshooting guides</li>
-        <li>💡 Better validation and user feedback</li>
-        <li>🔍 Step-by-step pairing process with real-time feedback</li>
-    </ul>
-
-    <h3>Version 1.0.0</h3>
-    <ul>
-        <li>🎉 Initial release of ADB Wireless Manager</li>
-        <li>✨ Modern tabbed interface with Connect, Devices, and Console tabs</li>
-        <li>📱 Complete wireless ADB workflow support (pair → connect → debug)</li>
-        <li>💾 Device management with persistent storage</li>
-        <li>🚀 Quick Connect action with keyboard shortcut (Ctrl+Alt+W)</li>
-        <li>📊 Real-time ADB status monitoring</li>
-        <li>🎨 IntelliJ-native UI components and styling</li>
-        <li>⚡ Performance optimized with coroutines for async operations</li>
-        <li>📋 Detailed console logging with timestamps</li>
-        <li>🔧 Cross-platform ADB detection (Windows, macOS, Linux)</li>
+        <li>Clean, minimal interface</li>
+        <li>Device list management</li>
+        <li>Basic connect/disconnect functionality</li>
+        <li>Real-time output logging</li>
+        <li>Persistent device storage</li>
     </ul>
     ]]></change-notes>
 </idea-plugin>

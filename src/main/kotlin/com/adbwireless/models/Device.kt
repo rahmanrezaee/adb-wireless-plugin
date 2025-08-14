@@ -1,27 +1,15 @@
 package com.adbwireless.models
 
 /**
- * Data class representing an Android device for wireless ADB connection
+ * Simple device model
  */
 data class Device(
-    val name: String,                    // User-friendly device name
-    val ip: String,                      // Device IP address
-    val defaultPort: String = "5555",    // Default connection port
-    var isConnected: Boolean = false,    // Current connection status
-    val lastConnected: Long = System.currentTimeMillis() // Timestamp of last connection
+    val name: String,
+    val ip: String,
+    val port: String = "5555",
+    var isConnected: Boolean = false
 ) {
-    /**
-     * String representation for UI display
-     */
-    override fun toString(): String = "$name ($ip)"
+    fun getConnectAddress(): String = "$ip:$port"
 
-    /**
-     * Get full address for connection (IP:Port)
-     */
-    fun getConnectAddress(): String = "$ip:$defaultPort"
-
-    /**
-     * Get pairing address with custom port
-     */
-    fun getPairAddress(port: String): String = "$ip:$port"
+    override fun toString(): String = "$name ($ip:$port)"
 }
