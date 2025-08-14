@@ -10,13 +10,14 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 
 /**
- * ADB Service with proper IntelliJ logging
+ * ADB Service with dynamic path configuration
  */
 @Service(Service.Level.PROJECT)
 class ADBService(private val project: Project) {
 
     // Use IntelliJ's logger instead of println
     private val logger = thisLogger()
+    private val settingsService = SettingsService.getInstance()
 
     data class CommandResult(
         val success: Boolean,
@@ -26,13 +27,31 @@ class ADBService(private val project: Project) {
         val fullOutput: String = ""
     )
 
-    private val adbPath = "D:\\Sdk\\platform-tools\\adb.exe"
+    /**
+     * Get the current ADB path from settings
+     */
+    private fun getAdbPath(): String {
+        return settingsService.getAdbPath()
+    }
 
     /**
-     * Execute ADB command with proper logging
+     * Execute ADB command with dynamic path resolution
      */
     fun executeAdbCommand(vararg args: String): CommandResult {
         return try {
+            val adbPath = getAdbPath()
+
+            // Validate ADB path before executing
+            if (!settingsService.validateAdbPath(adbPath)) {
+                logger.warn("[ADB] ADB not found at configured path: $adbPath")
+                return CommandResult(
+                    success = false,
+                    output = "",
+                    error = "ADB not found at: $adbPath. Please check your SDK configuration in Settings.",
+                    fullOutput = "ADB_NOT_FOUND: $adbPath"
+                )
+            }
+
             val commandLine = GeneralCommandLine().apply {
                 exePath = adbPath
                 addParameters(*args)
@@ -40,6 +59,7 @@ class ADBService(private val project: Project) {
             }
 
             // Use IntelliJ logger - this will appear in IDE logs
+            logger.info("[ADB] Using ADB path: $adbPath")
             logger.info("[ADB] Executing: ${commandLine.commandLineString}")
 
             val processOutput = CapturingProcessHandler(commandLine).runProcess(30000)
@@ -100,6 +120,7 @@ class ADBService(private val project: Project) {
         Thread.sleep(2000)
 
         return try {
+            val adbPath = getAdbPath()
             val commandLine = GeneralCommandLine().apply {
                 exePath = adbPath
                 addParameters(*originalArgs)
@@ -138,6 +159,7 @@ class ADBService(private val project: Project) {
      */
     private fun startAdbServer(): CommandResult {
         return try {
+            val adbPath = getAdbPath()
             val commandLine = GeneralCommandLine().apply {
                 exePath = adbPath
                 addParameters("start-server")
@@ -183,6 +205,18 @@ class ADBService(private val project: Project) {
         logger.info("[ADB] Starting pairing: $ip:$port with code: $code")
 
         return try {
+            val adbPath = getAdbPath()
+
+            // Validate ADB path before pairing
+            if (!settingsService.validateAdbPath(adbPath)) {
+                return CommandResult(
+                    success = false,
+                    output = "",
+                    error = "ADB not found at: $adbPath. Please configure your Android SDK in Settings.",
+                    fullOutput = "ADB_NOT_FOUND_FOR_PAIRING: $adbPath"
+                )
+            }
+
             val commandLine = GeneralCommandLine().apply {
                 exePath = adbPath
                 addParameters("pair", "$ip:$port", code)
@@ -255,6 +289,7 @@ class ADBService(private val project: Project) {
         Thread.sleep(3000)
 
         return try {
+            val adbPath = getAdbPath()
             val commandLine = GeneralCommandLine().apply {
                 exePath = adbPath
                 addParameters("pair", "$ip:$port", code)
@@ -296,7 +331,7 @@ class ADBService(private val project: Project) {
         }
     }
 
-    // Rest of the methods (connectDevice, disconnectDevice, etc.) with logger instead of println
+    // Rest of the methods with dynamic path support
     fun connectDevice(device: Device): CommandResult {
         logger.info("[ADB] Connecting to device: ${device.getConnectAddress()}")
         return executeAdbCommand("connect", device.getConnectAddress())
@@ -313,12 +348,17 @@ class ADBService(private val project: Project) {
     }
 
     fun checkAdbAvailability(): CommandResult {
-        val adbFile = File(adbPath)
-        if (!adbFile.exists()) {
+        val adbPath = getAdbPath()
+        if (!settingsService.validateAdbPath(adbPath)) {
             logger.warn("[ADB] ADB not found at: $adbPath")
-            return CommandResult(false, "", "ADB not found at: $adbPath")
+            return CommandResult(
+                success = false,
+                output = "",
+                error = "ADB not found at: $adbPath. Please configure your Android SDK in Settings → Tools → ADB Wireless Manager",
+                fullOutput = "ADB_NOT_AVAILABLE: $adbPath"
+            )
         }
-        logger.info("[ADB] Checking ADB availability")
+        logger.info("[ADB] Checking ADB availability at: $adbPath")
         return executeAdbCommand("version")
     }
 
@@ -370,5 +410,12 @@ class ADBService(private val project: Project) {
             output = results.joinToString("\n"),
             error = if (allSuccess) "" else "Some disconnections failed"
         )
+    }
+
+    /**
+     * Get SDK detection status for display purposes
+     */
+    fun getSdkStatus(): String {
+        return settingsService.getSdkDetectionStatus()
     }
 }

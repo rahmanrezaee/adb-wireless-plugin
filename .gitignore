@@ -5,3 +5,5 @@
 .kotlin
 .qodana
 build
+private.pem
+certificate.pem

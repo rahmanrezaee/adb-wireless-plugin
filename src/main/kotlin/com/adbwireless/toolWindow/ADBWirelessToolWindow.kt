@@ -1,5 +1,6 @@
 package com.adbwireless.toolWindow
 
+import com.adbwireless.dialogs.InitialAdbSetupDialog
 import com.adbwireless.dialogs.UnifiedDeviceDialog
 import com.adbwireless.models.Device
 import com.adbwireless.services.ADBService
@@ -7,6 +8,7 @@ import com.adbwireless.services.SettingsService
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
+import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
@@ -21,7 +23,7 @@ import java.awt.*
 import javax.swing.*
 
 /**
- * Modern ADB Wireless Manager Tool Window
+ * Simplified ADB Wireless Manager Tool Window (No SDK Configuration Section)
  */
 class ADBWirelessToolWindow(private val project: Project) {
 
@@ -42,6 +44,8 @@ class ADBWirelessToolWindow(private val project: Project) {
         layout = BoxLayout(this, BoxLayout.Y_AXIS)
         border = JBUI.Borders.empty(8)
         background = UIUtil.getListBackground()
+        minimumSize = Dimension(400, 100)
+        preferredSize = Dimension(600, 200)
     }
 
     // Device with connection status
@@ -53,18 +57,25 @@ class ADBWirelessToolWindow(private val project: Project) {
     private var deviceList = mutableListOf<DeviceWithStatus>()
 
     init {
-        loadDevices()
-        checkAdbStatus()
+        // Check if this is first time setup
+        if (settingsService.isFirstTimeSetup || !settingsService.isAdbConfigured()) {
+            showInitialSetupDialog()
+        } else {
+            loadDevices()
+            checkAdbStatus()
+        }
     }
 
     fun getContent(): JComponent {
         return panel {
-            // Device Management Section
+            // Device Management Section (No SDK Configuration)
             group("Device Management") {
-                // Modern toolbar with better spacing
+                // Main toolbar with device actions
                 row {
                     button("Add New Device") {
-                        showAddDeviceDialog()
+                        if (checkAdbBeforeAction()) {
+                            showAddDeviceDialog()
+                        }
                     }.apply {
                         component.icon = AllIcons.General.Add
                         component.preferredSize = Dimension(150, 34)
@@ -89,20 +100,36 @@ class ADBWirelessToolWindow(private val project: Project) {
                         component.toolTipText = "Restart ADB server and reset all connections"
                         component.font = UIUtil.getLabelFont(UIUtil.FontSize.NORMAL)
                     }
+
+                    // Push settings button to the far right
+                    comment("").resizableColumn()
+
+                    // Settings button - icon only, positioned at tail
+                    button("") {
+                        openSettings()
+                    }.apply {
+                        component.icon = AllIcons.General.Settings
+                        component.preferredSize = Dimension(34, 34)
+                        component.toolTipText = "Configure Android SDK and ADB settings"
+                        component.putClientProperty("JButton.buttonType", "square")
+                    }
                 }
 
-                // Modern device list with better styling
+                // Device list
                 row {
                     val scrollPane = JBScrollPane(deviceListPanel).apply {
-                        preferredSize = Dimension(0, 240)
-                        minimumSize = Dimension(0, 120)
-                        horizontalScrollBarPolicy = JScrollPane.HORIZONTAL_SCROLLBAR_NEVER
+                        preferredSize = Dimension(0, 260)
+                        minimumSize = Dimension(400, 120)
+                        horizontalScrollBarPolicy = JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED
                         verticalScrollBarPolicy = JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
                         border = JBUI.Borders.compound(
                             JBUI.Borders.customLine(JBColor.border()),
                             JBUI.Borders.empty(4)
                         )
                         background = UIUtil.getListBackground()
+
+                        // Ensure proper viewport sizing
+                        viewport.preferredSize = Dimension(400, 260)
                     }
                     cell(scrollPane)
                         .align(Align.FILL)
@@ -112,7 +139,6 @@ class ADBWirelessToolWindow(private val project: Project) {
 
             // Spacing between sections
             separator()
-
 
             // Activity Log Section
             group("Activity Log") {
@@ -150,7 +176,53 @@ class ADBWirelessToolWindow(private val project: Project) {
             }
         }.apply {
             border = JBUI.Borders.empty(16, 20, 20, 20)
+            minimumSize = Dimension(500, 400)
+            preferredSize = Dimension(700, 600)
         }
+    }
+
+    /**
+     * Show initial setup dialog if ADB is not configured
+     */
+    private fun showInitialSetupDialog() {
+        SwingUtilities.invokeLater {
+            val dialog = InitialAdbSetupDialog(project)
+            if (dialog.showAndGet()) {
+                // Setup completed successfully
+                loadDevices()
+                checkAdbStatus()
+                addOutput("🎉 ADB configuration completed successfully!")
+            } else {
+                // User cancelled setup
+                addOutput("⚠️ ADB configuration cancelled. Please configure ADB in Settings to use this plugin.")
+            }
+        }
+    }
+
+    /**
+     * Check if ADB is configured before performing actions
+     */
+    private fun checkAdbBeforeAction(): Boolean {
+        if (!settingsService.isAdbConfigured()) {
+            val result = Messages.showYesNoDialog(
+                project,
+                "ADB is not properly configured. Would you like to configure it now?",
+                "ADB Configuration Required",
+                "Configure ADB",
+                "Cancel",
+                Messages.getQuestionIcon()
+            )
+
+            if (result == Messages.YES) {
+                openSettings()
+            }
+            return false
+        }
+        return true
+    }
+
+    private fun openSettings() {
+        ShowSettingsUtil.getInstance().showSettingsDialog(project, "ADB Wireless Manager")
     }
 
     private fun createDevicePanel(deviceWithStatus: DeviceWithStatus): JPanel {
@@ -160,16 +232,20 @@ class ADBWirelessToolWindow(private val project: Project) {
                 JBUI.Borders.empty(12, 16, 12, 16)
             )
             background = UIUtil.getListBackground()
+            minimumSize = Dimension(400, 60)
+            preferredSize = Dimension(600, 60)
             maximumSize = Dimension(Int.MAX_VALUE, 60)
         }
 
         // Left side: Icon and device info
-        val leftPanel = JPanel(FlowLayout(FlowLayout.LEFT, 12, 8)).apply {
+        val leftPanel = JPanel(BorderLayout()).apply {
             background = UIUtil.getListBackground()
+            preferredSize = Dimension(300, 50)
 
-            // Modern connection status indicator
+            // Status indicator
             val statusIndicator = JPanel().apply {
-                preferredSize = Dimension(10, 10)
+                preferredSize = Dimension(12, 12)
+                minimumSize = Dimension(12, 12)
                 background = if (deviceWithStatus.isConnected) {
                     JBColor.namedColor("Plugins.Button.installForeground", JBColor.GREEN)
                 } else {
@@ -181,15 +257,18 @@ class ADBWirelessToolWindow(private val project: Project) {
             val deviceInfoPanel = JPanel().apply {
                 layout = BoxLayout(this, BoxLayout.Y_AXIS)
                 background = UIUtil.getListBackground()
+                border = JBUI.Borders.emptyLeft(12)
 
                 val nameLabel = JLabel(deviceWithStatus.device.name).apply {
                     font = UIUtil.getLabelFont(UIUtil.FontSize.NORMAL).deriveFont(Font.BOLD)
                     foreground = UIUtil.getLabelForeground()
+                    preferredSize = Dimension(250, 20)
                 }
 
                 val addressLabel = JLabel("${deviceWithStatus.device.ip}:${deviceWithStatus.device.port}").apply {
                     font = UIUtil.getLabelFont(UIUtil.FontSize.SMALL)
                     foreground = JBColor.namedColor("Label.infoForeground", JBColor.GRAY)
+                    preferredSize = Dimension(250, 16)
                 }
 
                 add(nameLabel)
@@ -197,13 +276,14 @@ class ADBWirelessToolWindow(private val project: Project) {
                 add(addressLabel)
             }
 
-            add(statusIndicator)
-            add(deviceInfoPanel)
+            add(statusIndicator, BorderLayout.WEST)
+            add(deviceInfoPanel, BorderLayout.CENTER)
         }
 
-        // Right side: Action buttons with modern styling
+        // Right side: Action buttons with fixed sizing
         val rightPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 8, 8)).apply {
             background = UIUtil.getListBackground()
+            preferredSize = Dimension(180, 50)
 
             if (deviceWithStatus.isConnected) {
                 // Connected device: Only show Disconnect button
@@ -224,7 +304,9 @@ class ADBWirelessToolWindow(private val project: Project) {
                     font = UIUtil.getLabelFont(UIUtil.FontSize.SMALL)
                     toolTipText = "Edit device settings, pair, or connect"
                     addActionListener {
-                        showEditDeviceDialog(deviceWithStatus)
+                        if (checkAdbBeforeAction()) {
+                            showEditDeviceDialog(deviceWithStatus)
+                        }
                     }
                 }
 
@@ -243,7 +325,7 @@ class ADBWirelessToolWindow(private val project: Project) {
             }
         }
 
-        panel.add(leftPanel, BorderLayout.WEST)
+        panel.add(leftPanel, BorderLayout.CENTER)
         panel.add(rightPanel, BorderLayout.EAST)
 
         return panel
@@ -357,6 +439,8 @@ class ADBWirelessToolWindow(private val project: Project) {
     }
 
     private fun refreshDeviceList() {
+        if (!checkAdbBeforeAction()) return
+
         addOutput("🔄 Refreshing device list and connection status...")
 
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Refreshing Device List", false) {
@@ -394,6 +478,9 @@ class ADBWirelessToolWindow(private val project: Project) {
                 } catch (e: Exception) {
                     ApplicationManager.getApplication().invokeLater {
                         addOutput("❌ Error refreshing device list: ${e.message}")
+                        if (e.message?.contains("ADB not found") == true) {
+                            addOutput("🔧 Please configure your Android SDK in Settings")
+                        }
                     }
                 }
             }
@@ -401,6 +488,8 @@ class ADBWirelessToolWindow(private val project: Project) {
     }
 
     private fun restartAdbServer() {
+        if (!checkAdbBeforeAction()) return
+
         addOutput("🔄 Restarting ADB server and resetting all connections...")
 
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Restarting ADB Server", false) {
@@ -417,6 +506,9 @@ class ADBWirelessToolWindow(private val project: Project) {
                         } else {
                             addOutput("❌ Failed to restart ADB server")
                             addOutput("⚠️ Error: ${result.error}")
+                            if (result.error.contains("ADB not found")) {
+                                addOutput("🔧 Please configure your Android SDK in Settings")
+                            }
                         }
                     }
                 } catch (e: Exception) {
@@ -436,9 +528,10 @@ class ADBWirelessToolWindow(private val project: Project) {
                     ApplicationManager.getApplication().invokeLater {
                         if (result.success) {
                             addOutput("✅ ADB is available and ready")
+                            addOutput("📍 ${adbService.getSdkStatus()}")
                         } else {
                             addOutput("❌ ADB not available: ${result.error}")
-                            addOutput("💡 Make sure Android SDK platform-tools are installed")
+                            addOutput("🔧 Please configure your Android SDK in Settings → Tools → ADB Wireless Manager")
                         }
                     }
                 } catch (e: Exception) {

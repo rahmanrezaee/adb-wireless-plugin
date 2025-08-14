@@ -4,26 +4,29 @@
     <vendor email="rahmanrezaie60@gmail.com">Rahman Rezaee</vendor>
 
     <description><![CDATA[
-    <h3>ADB Wireless Manager - Simple Version</h3>
-    <p>A clean, minimal plugin for managing wireless ADB connections.</p>
+    <h3>ADB Wireless Manager - Enhanced Version</h3>
+    <p>A comprehensive plugin for managing wireless ADB connections with automatic SDK detection.</p>
 
     <h4>Features:</h4>
     <ul>
-        <li>Add and manage wireless devices</li>
-        <li>Connect/disconnect from devices</li>
-        <li>View connection status and logs</li>
-        <li>Simple, intuitive interface</li>
+        <li>🔧 Automatic Android SDK detection</li>
+        <li>⚙️ Configurable ADB path settings</li>
+        <li>📱 Add and manage wireless devices</li>
+        <li>🔗 Connect/disconnect from devices</li>
+        <li>📊 View connection status and logs</li>
+        <li>🎯 Simple, intuitive interface</li>
     </ul>
 
-    <h4>How to use:</h4>
+    <h4>Setup:</h4>
     <ol>
+        <li>Go to Settings → Tools → ADB Wireless Manager to configure your Android SDK</li>
         <li>Open the ADB Wireless tool window</li>
         <li>Add your device with IP address</li>
-        <li>Click Connect to establish wireless connection</li>
+        <li>Pair and connect to establish wireless connection</li>
         <li>Start debugging wirelessly!</li>
     </ol>
 
-    <p><em>Note: You need to pair your device first using regular ADB commands or Android Studio.</em></p>
+    <p><em>The plugin automatically detects your Android SDK or you can configure it manually in settings.</em></p>
     ]]></description>
 
     <!-- Compatibility -->
@@ -38,20 +41,33 @@
                     factoryClass="com.adbwireless.toolWindow.ADBWirelessToolWindowFactory"
                     icon="/icons/wifi.svg"/>
 
+        <!-- Settings Page -->
+        <applicationConfigurable
+                parentId="tools"
+                instance="com.adbwireless.settings.ADBWirelessConfigurable"
+                id="com.adbwireless.settings.ADBWirelessConfigurable"
+                displayName="ADB Wireless Manager"/>
+
         <!-- Notification Groups -->
         <notificationGroup id="ADB Wireless Manager"
                            displayType="BALLOON"/>
     </extensions>
 
-    <!-- Simple Actions -->
+    <!-- Actions -->
     <actions>
-        <group id="ADBWirelessSimple" text="ADB Wireless" description="Simple ADB Wireless tools">
+        <group id="ADBWirelessGroup" text="ADB Wireless" description="ADB Wireless Manager tools">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
 
             <action id="com.adbwireless.OpenToolWindow"
                     class="com.adbwireless.actions.OpenToolWindowAction"
                     text="Open ADB Wireless Manager"
                     description="Open the ADB Wireless Manager tool window"
+                    icon="/icons/wifi.svg"/>
+
+            <action id="com.adbwireless.OpenSettings"
+                    class="com.adbwireless.actions.OpenSettingsAction"
+                    text="ADB Wireless Settings"
+                    description="Configure Android SDK and ADB settings"
                     icon="/icons/wifi.svg"/>
         </group>
     </actions>
@@ -60,11 +76,13 @@
     <change-notes><![CDATA[
     <h3>Version 1.0.0</h3>
     <ul>
-        <li>Clean, minimal interface</li>
-        <li>Device list management</li>
-        <li>Basic connect/disconnect functionality</li>
-        <li>Real-time output logging</li>
-        <li>Persistent device storage</li>
+        <li>🔧 Automatic Android SDK detection</li>
+        <li>⚙️ Configurable ADB path in Settings</li>
+        <li>📱 Enhanced device management interface</li>
+        <li>🔗 Improved connect/disconnect functionality</li>
+        <li>📊 Real-time output logging</li>
+        <li>💾 Persistent device storage</li>
+        <li>🎯 Cross-platform support (Windows, macOS, Linux)</li>
     </ul>
     ]]></change-notes>
 </idea-plugin>
