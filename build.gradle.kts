@@ -184,7 +184,6 @@ intellijPlatformTesting {
                     )
                 }
             }
-
             plugins {
                 robotServerPlugin()
             }
