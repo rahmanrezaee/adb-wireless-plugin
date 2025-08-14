@@ -1,10 +1,10 @@
 <idea-plugin>
     <id>com.adbwireless.plugin</id>
-    <name>ADB Wireless Manager</name>
+    <n>ADB Wireless Manager</n>
     <vendor email="rahmanrezaie60@gmail.com">Rahman Rezaee</vendor>
 
     <description><![CDATA[
-    <h3>ADB Wireless Manager - Enhanced Version</h3>
+    <h3>ADB Wireless Manager</h3>
     <p>A comprehensive plugin for managing wireless ADB connections with automatic SDK detection.</p>
 
     <h4>Features:</h4>
@@ -26,11 +26,11 @@
         <li>Start debugging wirelessly!</li>
     </ol>
 
-    <p><em>The plugin automatically detects your Android SDK or you can configure it manually in settings.</em></p>
+    <p><em>The plugin automatically detects your Android SDK installation.</em></p>
     ]]></description>
 
     <!-- Compatibility -->
-    <idea-version since-build="243"/>
+    <idea-version since-build="233" until-build="243.*"/>
     <depends>com.intellij.modules.platform</depends>
 
     <!-- Extensions -->

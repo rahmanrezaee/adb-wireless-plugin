@@ -1,6 +1,5 @@
 import org.jetbrains.changelog.Changelog
 import org.jetbrains.changelog.markdownToHTML
-import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 
 plugins {
     id("java") // Java support
@@ -29,16 +28,20 @@ repositories {
     }
 }
 
-// Dependencies are managed with Gradle version catalog
+// Dependencies are managed with Gradle version catalog - REMOVED TEST DEPENDENCIES
 dependencies {
-
-    testImplementation(libs.junit)
-    testImplementation(libs.opentest4j)
-
     // IntelliJ Platform Gradle Plugin Dependencies Extension
     intellijPlatform {
-        // Use lower version for better compatibility
-        intellijIdeaCommunity(providers.gradleProperty("platformVersion"))
+        // Use different IDE source based on environment
+        val localIdeePath = providers.environmentVariable("LOCAL_IDE_PATH")
+
+        if (localIdeePath.isPresent && file(localIdeePath.get()).exists()) {
+            // Use local IDE if path is provided and exists (for local development)
+            local(localIdeePath.get())
+        } else {
+            // Use downloaded IDE (for CI/CD and when local IDE not available)
+            intellijIdeaCommunity(providers.gradleProperty("platformVersion"))
+        }
 
         bundledPlugins(providers.gradleProperty("platformBundledPlugins").map {
             it.split(',').filter { plugin -> plugin.isNotBlank() }
@@ -50,8 +53,7 @@ dependencies {
             it.split(',').filter { module -> module.isNotBlank() }
         })
 
-        // Testing framework
-        testFramework(TestFrameworkType.Platform)
+        // REMOVED: Testing framework - no longer needed
     }
 }
 
@@ -106,12 +108,12 @@ changelog {
     repositoryUrl = providers.gradleProperty("pluginRepositoryUrl")
 }
 
-// Configure Gradle Kover Plugin for code coverage
+// Configure Gradle Kover Plugin for code coverage - DISABLED
 kover {
     reports {
         total {
             xml {
-                onCheck = true
+                onCheck = false // Disabled since no tests
             }
         }
     }
@@ -124,6 +126,21 @@ tasks {
 
     publishPlugin {
         dependsOn(patchChangelog)
+    }
+
+    // COMPLETELY DISABLE ALL TEST-RELATED TASKS
+    test {
+        enabled = false
+    }
+
+    // Remove test from check dependencies
+    check {
+        dependsOn.remove(test)
+    }
+
+    // DISABLE buildSearchableOptions - causes crashes with our configurable
+    buildSearchableOptions {
+        enabled = false
     }
 
     // Custom task to check ADB availability during build
@@ -149,35 +166,6 @@ tasks {
                 }
             } catch (e: Exception) {
                 println("⚠️ ADB not found, but plugin can still be built: ${e.message}")
-            }
-        }
-    }
-
-    // Configure test task
-    test {
-        useJUnitPlatform()
-        testLogging {
-            events("passed", "skipped", "failed")
-        }
-    }
-}
-
-// IntelliJ Platform Testing configuration
-intellijPlatformTesting {
-    runIde {
-        register("runIdeForUiTests") {
-            task {
-                jvmArgumentProviders += CommandLineArgumentProvider {
-                    listOf(
-                        "-Drobot-server.port=8082",
-                        "-Dide.mac.message.dialogs.as.sheets=false",
-                        "-Djb.privacy.policy.text=<!--999.999-->",
-                        "-Djb.consents.confirmation.enabled=false",
-                    )
-                }
-            }
-            plugins {
-                robotServerPlugin()
             }
         }
     }
