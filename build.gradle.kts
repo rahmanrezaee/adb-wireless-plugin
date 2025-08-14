@@ -37,19 +37,8 @@ dependencies {
 
     // IntelliJ Platform Gradle Plugin Dependencies Extension
     intellijPlatform {
-        // Use different IDE source based on environment
-        // Your local IntelliJ path
-
-//        val localIdeePath = providers.provider { "D:/inteje" }
-        val localIdeePath = providers.environmentVariable("LOCAL_IDE_PATH")
-
-        if (localIdeePath.isPresent && file(localIdeePath.get()).exists()) {
-            // Use local IDE if path is provided and exists (for local development)
-            local(localIdeePath.get())
-        } else {
-            // Use downloaded IDE (for CI/CD and when local IDE not available)
-            intellijIdeaCommunity(providers.gradleProperty("platformVersion"))
-        }
+        // Use lower version for better compatibility
+        intellijIdeaCommunity(providers.gradleProperty("platformVersion"))
 
         bundledPlugins(providers.gradleProperty("platformBundledPlugins").map {
             it.split(',').filter { plugin -> plugin.isNotBlank() }
