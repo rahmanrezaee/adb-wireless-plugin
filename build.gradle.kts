@@ -39,7 +39,9 @@ dependencies {
     intellijPlatform {
         // Use different IDE source based on environment
         // Your local IntelliJ path
-        val localIdeePath = providers.provider { "D:/inteje" }
+
+//        val localIdeePath = providers.provider { "D:/inteje" }
+        val localIdeePath = providers.environmentVariable("LOCAL_IDE_PATH")
 
         if (localIdeePath.isPresent && file(localIdeePath.get()).exists()) {
             // Use local IDE if path is provided and exists (for local development)
