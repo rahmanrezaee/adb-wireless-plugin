@@ -1,10 +1,12 @@
 package com.adbwireless.toolWindow
 
 import com.adbwireless.dialogs.InitialAdbSetupDialog
+import com.adbwireless.dialogs.SelectUsbDeviceDialog
 import com.adbwireless.dialogs.UnifiedDeviceDialog
 import com.adbwireless.models.Device
 import com.adbwireless.services.ADBService
 import com.adbwireless.services.SettingsService
+import com.adbwireless.services.UsbQuickConnector
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
@@ -15,12 +17,24 @@ import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.ui.JBColor
-import com.intellij.ui.components.*
-import com.intellij.ui.dsl.builder.*
+import com.intellij.ui.components.JBScrollPane
+import com.intellij.ui.components.JBTextArea
+import com.intellij.ui.dsl.builder.Align
+import com.intellij.ui.dsl.builder.panel
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
-import java.awt.*
-import javax.swing.*
+import java.awt.Component
+import java.awt.Dimension
+import java.awt.FlowLayout
+import java.awt.Font
+import java.awt.Toolkit
+import java.util.concurrent.atomic.AtomicReference
+import javax.swing.JButton
+import javax.swing.JComponent
+import javax.swing.JLabel
+import javax.swing.JPanel
+import javax.swing.JScrollPane
+import javax.swing.SwingUtilities
 
 /**
  * Simplified ADB Wireless Manager Tool Window (No SDK Configuration Section)
@@ -41,7 +55,7 @@ class ADBWirelessToolWindow(private val project: Project) {
 
     // Custom device list panel
     private val deviceListPanel = JPanel().apply {
-        layout = BoxLayout(this, BoxLayout.Y_AXIS)
+        layout = javax.swing.BoxLayout(this, javax.swing.BoxLayout.Y_AXIS)
         border = JBUI.Borders.empty(8)
         background = UIUtil.getListBackground()
         minimumSize = Dimension(400, 100)
@@ -80,6 +94,17 @@ class ADBWirelessToolWindow(private val project: Project) {
                         component.icon = AllIcons.General.Add
                         component.preferredSize = Dimension(150, 34)
                         component.toolTipText = "Add and configure a new Android device"
+                        component.font = UIUtil.getLabelFont(UIUtil.FontSize.NORMAL)
+                    }
+
+                    // Quick Connect via USB button beside "Add New Device"
+                    button("Quick Connect (USB)") {
+                        if (checkAdbBeforeAction()) {
+                            quickConnectViaUsb()
+                        }
+                    }.apply {
+                        component.preferredSize = Dimension(170, 34)
+                        component.toolTipText = "Enable and connect ADB over Wi‑Fi from a USB-connected device"
                         component.font = UIUtil.getLabelFont(UIUtil.FontSize.NORMAL)
                     }
 
@@ -226,7 +251,7 @@ class ADBWirelessToolWindow(private val project: Project) {
     }
 
     private fun createDevicePanel(deviceWithStatus: DeviceWithStatus): JPanel {
-        val panel = JPanel(BorderLayout()).apply {
+        val panel = JPanel(java.awt.BorderLayout()).apply {
             border = JBUI.Borders.compound(
                 JBUI.Borders.customLineBottom(JBColor.border()),
                 JBUI.Borders.empty(12, 16, 12, 16)
@@ -238,7 +263,7 @@ class ADBWirelessToolWindow(private val project: Project) {
         }
 
         // Left side: Icon and device info
-        val leftPanel = JPanel(BorderLayout()).apply {
+        val leftPanel = JPanel(java.awt.BorderLayout()).apply {
             background = UIUtil.getListBackground()
             preferredSize = Dimension(300, 50)
 
@@ -255,7 +280,7 @@ class ADBWirelessToolWindow(private val project: Project) {
             }
 
             val deviceInfoPanel = JPanel().apply {
-                layout = BoxLayout(this, BoxLayout.Y_AXIS)
+                layout = javax.swing.BoxLayout(this, javax.swing.BoxLayout.Y_AXIS)
                 background = UIUtil.getListBackground()
                 border = JBUI.Borders.emptyLeft(12)
 
@@ -272,12 +297,12 @@ class ADBWirelessToolWindow(private val project: Project) {
                 }
 
                 add(nameLabel)
-                add(Box.createVerticalStrut(2))
+                add(javax.swing.Box.createVerticalStrut(2))
                 add(addressLabel)
             }
 
-            add(statusIndicator, BorderLayout.WEST)
-            add(deviceInfoPanel, BorderLayout.CENTER)
+            add(statusIndicator, java.awt.BorderLayout.WEST)
+            add(deviceInfoPanel, java.awt.BorderLayout.CENTER)
         }
 
         // Right side: Action buttons with fixed sizing
@@ -325,8 +350,8 @@ class ADBWirelessToolWindow(private val project: Project) {
             }
         }
 
-        panel.add(leftPanel, BorderLayout.CENTER)
-        panel.add(rightPanel, BorderLayout.EAST)
+        panel.add(leftPanel, java.awt.BorderLayout.CENTER)
+        panel.add(rightPanel, java.awt.BorderLayout.EAST)
 
         return panel
     }
@@ -339,7 +364,7 @@ class ADBWirelessToolWindow(private val project: Project) {
             if (deviceList.isEmpty()) {
                 // Modern empty state
                 val emptyPanel = JPanel().apply {
-                    layout = BoxLayout(this, BoxLayout.Y_AXIS)
+                    layout = javax.swing.BoxLayout(this, javax.swing.BoxLayout.Y_AXIS)
                     background = UIUtil.getListBackground()
                     border = JBUI.Borders.empty(40, 20, 40, 20)
 
@@ -360,9 +385,9 @@ class ADBWirelessToolWindow(private val project: Project) {
                     }
 
                     add(iconLabel)
-                    add(Box.createVerticalStrut(8))
+                    add(javax.swing.Box.createVerticalStrut(8))
                     add(messageLabel)
-                    add(Box.createVerticalStrut(4))
+                    add(javax.swing.Box.createVerticalStrut(4))
                     add(instructionLabel)
                 }
                 deviceListPanel.add(emptyPanel)
@@ -416,7 +441,7 @@ class ADBWirelessToolWindow(private val project: Project) {
                     }
                 } catch (e: Exception) {
                     ApplicationManager.getApplication().invokeLater {
-                        addOutput("💥 Exception during disconnect: ${e.message}")
+                        addOutput("💥 Exception during disconnect: ${e.message ?: e.toString()}")
                     }
                 }
             }
@@ -447,15 +472,10 @@ class ADBWirelessToolWindow(private val project: Project) {
             override fun run(indicator: ProgressIndicator) {
                 try {
                     val devicesResult = adbService.listDevices()
-                    val connectedAddresses = if (devicesResult.success) {
-                        devicesResult.output.lines()
-                            .filter { it.contains("device") && !it.contains("List of devices") }
-                            .mapNotNull { line ->
-                                val parts = line.split("\\s+".toRegex())
-                                if (parts.isNotEmpty()) parts[0] else null
-                            }
+                    val connectedAddresses: Set<String> = if (devicesResult.success) {
+                        parseConnectedSerials(devicesResult.output)
                     } else {
-                        emptyList()
+                        emptySet()
                     }
 
                     ApplicationManager.getApplication().invokeLater {
@@ -513,7 +533,7 @@ class ADBWirelessToolWindow(private val project: Project) {
                     }
                 } catch (e: Exception) {
                     ApplicationManager.getApplication().invokeLater {
-                        addOutput("💥 Exception during restart: ${e.message}")
+                        addOutput("💥 Exception during restart: ${e.message ?: e.toString()}")
                     }
                 }
             }
@@ -559,6 +579,145 @@ class ADBWirelessToolWindow(private val project: Project) {
                 refreshDeviceList()
             }
         }
+    }
+
+    // Quick Connect via USB flow used by the toolbar button
+    private fun quickConnectViaUsb() {
+        addOutput("⚡ Quick Connect via USB started...")
+        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Quick Connect via USB", false) {
+            override fun run(indicator: ProgressIndicator) {
+                try {
+                    val connector = UsbQuickConnector(adbService, indicator)
+
+                    indicator.text = "Discovering USB connected devices..."
+                    val devices = connector.listUsbDevices()
+
+                    if (devices.isEmpty()) {
+                        ApplicationManager.getApplication().invokeLater {
+                            addOutput("⚠️ No USB devices found. Connect a device via USB with USB debugging enabled.")
+                            Messages.showWarningDialog(
+                                project,
+                                "Connect a device via USB with USB debugging enabled.",
+                                "No USB Devices Found"
+                            )
+                        }
+                        return
+                    }
+
+                    // Choose device on EDT when needed
+                    val chosen: UsbQuickConnector.UsbDevice = if (devices.size == 1) {
+                        devices.first()
+                    } else {
+                        val ref = AtomicReference<UsbQuickConnector.UsbDevice?>(null)
+                        ApplicationManager.getApplication().invokeAndWait {
+                            val dlg = SelectUsbDeviceDialog(project, devices)
+                            if (dlg.showAndGet()) {
+                                ref.set(dlg.selectedDevice)
+                            }
+                        }
+                        val picked = ref.get()
+                        if (picked == null) {
+                            ApplicationManager.getApplication().invokeLater {
+                                addOutput("ℹ️ Quick Connect cancelled")
+                            }
+                            return
+                        }
+                        picked
+                    }
+
+                    indicator.text = "Fetching device IP address..."
+                    val ip = connector.getDeviceIp(chosen.serial)
+                        ?: throw IllegalStateException("Could not determine device IP address. Ensure device Wi‑Fi is ON and connected.")
+
+                    val port = 5555
+                    indicator.text = "Enabling ADB over TCP/IP on port $port..."
+                    connector.enableTcpIp(chosen.serial, port)
+
+                    indicator.text = "Connecting to $ip:$port..."
+                    val hostPort = "$ip:$port"
+                    val ok = connector.connect(hostPort)
+                    if (!ok) {
+                        throw IllegalStateException("Failed to connect to $hostPort. Ensure device and PC are on the same network.")
+                    }
+
+                    // Save device using SettingsService
+                    settingsService.saveDevice(
+                        Device(
+                            name = chosen.model ?: chosen.product ?: chosen.deviceName ?: "Android Device",
+                            ip = ip,
+                            port = port.toString()
+                        )
+                    )
+
+                    // Inform success immediately (no refresh yet)
+                    ApplicationManager.getApplication().invokeLater {
+                        addOutput("✅ Connected to ${chosen.displayName()} at $hostPort (saved for future reconnects)")
+                    }
+
+                    // Wait for device to report 'device' state via get-state (more reliable than parsing 'devices')
+                    indicator.text = "Verifying device is online..."
+                    val online = waitUntilDeviceOnline(hostPort, timeoutMs = 15000, pollIntervalMs = 400)
+                            || run {
+                        // One reconnect attempt if not seen yet
+                        indicator.text = "Reconnecting to ensure device is online..."
+                        connector.connect(hostPort)
+                        waitUntilDeviceOnline(hostPort, timeoutMs = 8000, pollIntervalMs = 400)
+                    }
+
+                    ApplicationManager.getApplication().invokeLater {
+                        if (online) {
+                            addOutput("🔍 Verified device online: $hostPort")
+                        } else {
+                            addOutput("⌛ Device did not report online state within timeout: $hostPort (refreshing anyway)")
+                        }
+                        refreshDeviceList()
+                    }
+                } catch (t: Throwable) {
+                    ApplicationManager.getApplication().invokeLater {
+                        addOutput("❌ Quick Connect via USB failed: ${t.message ?: "Unknown error"}")
+                        Messages.showErrorDialog(
+                            project,
+                            "${t.message ?: "Unknown error"}\n\nTips:\n• Allow USB debugging\n• Accept the device authorization prompt\n• Ensure Wireless debugging (if required) is enabled",
+                            "Quick Connect via USB Failed"
+                        )
+                    }
+                }
+            }
+        })
+    }
+
+    private fun parseConnectedSerials(output: String): Set<String> {
+        val out = mutableSetOf<String>()
+        output.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("List of devices attached") }
+            .forEach { line ->
+                val parts = line.split(Regex("\\s+"))
+                if (parts.size >= 2) {
+                    val serial = parts[0]
+                    val state = parts[1]
+                    if (state == "device") {
+                        out += serial
+                    }
+                }
+            }
+        return out
+    }
+
+    // Poll 'adb -s <hostPort> get-state' until it returns 'device'
+    private fun waitUntilDeviceOnline(hostPort: String, timeoutMs: Int = 12000, pollIntervalMs: Int = 300): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            val res = adbService.executeAdbCommand("-s", hostPort, "get-state")
+            val state = (res.output.ifBlank { res.error }).trim().lowercase()
+            if (state == "device") return true
+            try {
+                Thread.sleep(pollIntervalMs.toLong())
+            } catch (_: InterruptedException) {
+                return false
+            }
+        }
+        return false
     }
 
     private fun addOutput(message: String) {

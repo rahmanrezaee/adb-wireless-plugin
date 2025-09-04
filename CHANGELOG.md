@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [1.1.0]
+### New Features
+-  Quick Connect via USB: enable TCP/IP and connect over Wi‑Fi in one click
+-  Saves device for future reconnects without re-entering pairing codes
+-  Robust IP discovery from the device (multiple strategies)
+-  Integrated notifications and background execution
+
 ## [1.0.1]
 ### Fixed
 - Compatibility improvements for older IDE versions

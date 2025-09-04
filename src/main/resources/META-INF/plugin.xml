@@ -15,45 +15,40 @@
         <li>🔗 Connect/disconnect from devices</li>
         <li>📊 View connection status and logs</li>
         <li>🎯 Simple, intuitive interface</li>
+        <li>⚡ Quick Connect via USB (enable and connect Wi‑Fi ADB in one click)</li>
     </ul>
 
     <h4>Setup:</h4>
     <ol>
         <li>Go to Settings → Tools → ADB Wireless Manager to configure your Android SDK</li>
         <li>Open the ADB Wireless tool window</li>
-        <li>Add your device with IP address</li>
-        <li>Pair and connect to establish wireless connection</li>
+        <li>Add your device with IP address or use Quick Connect via USB</li>
+        <li>Pair and connect to establish wireless connection, or use USB once to enable Wi‑Fi ADB</li>
         <li>Start debugging wirelessly!</li>
     </ol>
 
     <p><em>The plugin automatically detects your Android SDK or you can configure it manually in settings.</em></p>
     ]]></description>
 
-    <!-- Compatibility - Compatible with Android Studio 2023.3.1 and later -->
     <idea-version since-build="232"/>
     <depends>com.intellij.modules.platform</depends>
 
-    <!-- Extensions -->
     <extensions defaultExtensionNs="com.intellij">
-        <!-- Tool Window -->
         <toolWindow id="ADB Wireless"
                     anchor="right"
                     factoryClass="com.adbwireless.toolWindow.ADBWirelessToolWindowFactory"
                     icon="/icons/wifi.svg"/>
 
-        <!-- Settings Page -->
         <applicationConfigurable
                 parentId="tools"
                 instance="com.adbwireless.settings.ADBWirelessConfigurable"
                 id="com.adbwireless.settings.ADBWirelessConfigurable"
                 displayName="ADB Wireless Manager"/>
 
-        <!-- Notification Groups -->
         <notificationGroup id="ADB Wireless Manager"
                            displayType="BALLOON"/>
     </extensions>
 
-    <!-- Actions -->
     <actions>
         <group id="ADBWirelessGroup" text="ADB Wireless" description="ADB Wireless Manager tools">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
@@ -69,11 +64,18 @@
                     text="ADB Wireless Settings"
                     description="Configure Android SDK and ADB settings"
                     icon="/icons/wifi.svg"/>
+
         </group>
     </actions>
 
-    <!-- Change Notes -->
     <change-notes><![CDATA[
+    <h3>Version 1.1.0</h3>
+    <ul>
+        <li>⚡ Quick Connect via USB: enable TCP/IP and connect over Wi‑Fi in one click</li>
+        <li>💾 Saves device for future reconnects without re-entering pairing codes</li>
+        <li>🧠 Robust IP discovery from the device (multiple strategies)</li>
+        <li>🔔 Integrated notifications and background execution</li>
+    </ul>
     <h3>Version 1.0.1</h3>
     <ul>
         <li>🔧 Fixed buildSearchableOptions task crashing in CI/CD environments</li>
